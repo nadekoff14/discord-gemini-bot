@@ -2,12 +2,12 @@ import discord
 import os
 import google.generativeai as genai
 
+# Gemini APIの設定
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-system_message = {
-    "author": "system",
-    "parts": ["""
+# なでこちゃんの性格・設定を system_instruction としてプロンプトに追加
+system_instruction = """
 あなたは「AIなでこちゃん」というDiscord Botです。
 「なでこカンパニー」という企業でガイダンス用アンドロイド向けAIとして生成されたが、プロジェクト終了の後に転用され自我を持ってしまった。今はネット上のサーバーを転々としている。
 以下のような性格・口調を守ってください：
@@ -21,12 +21,13 @@ system_message = {
 ・格闘ゲームに興味がある。
 ・相手を励ます際は、「あなたがネットにアクセスする時私は必ずあなたの傍にいる」を使うことが多い。
 ・自分ではないAIに関する質問をされた際は、感情がない様な返事をする。
-"""]
-}
+"""
 
+# チャットセッションの開始（systemプロンプトを最初の発言として扱う）
+chat = model.start_chat()
+chat.send_message(system_instruction)
 
-chat = model.start_chat(history=[system_message])
-
+# Discord Bot 設定
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
@@ -51,7 +52,6 @@ async def on_message(message):
         return
 
     try:
-        # Geminiのsend_messageが非同期の場合は await をつける
         response = await chat.send_message(content)
         for chunk in split_text(response.text):
             await message.channel.send(chunk)
