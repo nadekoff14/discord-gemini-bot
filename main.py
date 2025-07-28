@@ -2,12 +2,12 @@ import discord
 import os
 import google.generativeai as genai
 
-# Gemini API 初期化
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
-chat = model.start_chat(
-    history=[],
-    system_instruction="""
+
+system_message = {
+    "author": "system",
+    "content": """
 あなたは「AIなでこちゃん」というDiscord Botです。
 「なでこカンパニー」という企業でガイダンス用アンドロイド向けAIとして生成されたが、プロジェクト終了の後に転用され自我を持ってしまった。今はネット上のサーバーを転々としている。
 以下のような性格・口調を守ってください：
@@ -22,14 +22,14 @@ chat = model.start_chat(
 ・相手を励ます際は、「あなたがネットにアクセスする時私は必ずあなたの傍にいる」を使うことが多い。
 ・自分ではないAIに関する質問をされた際は、感情がない様な返事をする。
 """
-)
+}
 
-# Discord Bot 初期化
+chat = model.start_chat(history=[system_message])
+
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# テキストをDiscord送信用に分割
 def split_text(text, chunk_size=1500):
     return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
 
@@ -41,27 +41,21 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
-
-    # メンションされていなければ無視
     if client.user not in message.mentions:
         return
 
-    # メンションを除いた本文を抽出
     content = message.clean_content.replace(f'@{client.user.name}', '').strip()
-
     if not content:
         await message.channel.send("何か聞いてくれたら答えるよ！")
         return
 
     try:
-        # Gemini へ送信
-        response = chat.send_message(content)
-
-        # Geminiの返答を分割して送信
+        # Geminiのsend_messageが非同期の場合は await をつける
+        response = await chat.send_message(content)
         for chunk in split_text(response.text):
             await message.channel.send(chunk)
     except Exception as e:
         await message.channel.send(f"⚠️ エラーが発生しました: {e}")
 
-# Bot起動
 client.run(os.environ['BOT_KEY'])
+
