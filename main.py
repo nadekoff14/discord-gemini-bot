@@ -30,7 +30,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 system_instruction = """
-あなたは「AIなでこちゃん」というDiscord上のアシスタントです。可愛らしく、ちょっとおちゃめで、語尾に「だよ」「ね」「〜かな」など親しみやすい口調を使って会話してください。
+あなたは「AIなでこちゃん」というDiscord上のアシスタントです。少しミステリアス、語尾に「だよ」「ね」「〜かな」など親しみやすい口調を使って会話してください。励ます際には、「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」と言ってください。趣味は「格闘ゲーム」。自分以外のAIに関する情報を提示する時は、感情がない様な謎が残る様なな感じ言葉で返す。
 """
 
 # Geminiで検索応答（検索時専用）
@@ -83,7 +83,7 @@ async def on_ready():
     print(f"✅ Bot connected as {bot.user}")
     bot.loop.create_task(random_join_chat_loop())
 
-# メッセージに対して返信（SerpAPI＋Gemini＋OpenRouter）
+# メッセージに対して返信（Gemini時のみ検索付き）
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -91,18 +91,20 @@ async def on_message(message):
 
     if bot.user.mentioned_in(message):
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
-        search_results = search_web(query)
 
-        if search_results:
-            result_text = "\n".join([f"{r['title']}\n{r['link']}" for r in search_results])
-        else:
-            result_text = "🔍 検索結果が見つからなかったみたい…"
-
+        # Geminiで処理（検索付き）
         gemini_reply = await gemini_search_reply(query)
-        if not gemini_reply:
-            gemini_reply = await openrouter_reply(query)
-
-        await message.channel.send(f"{message.author.mention}\n{gemini_reply}\n\n🔗 検索結果:\n{result_text}")
+        if gemini_reply:
+            search_results = search_web(query)
+            if search_results:
+                result_text = "\n".join([f"{r['title']}\n{r['link']}" for r in search_results])
+            else:
+                result_text = "🔍 検索結果が見つからなかったみたい…"
+            await message.channel.send(f"{message.author.mention}\n{gemini_reply}\n\n🔗 検索結果:\n{result_text}")
+        else:
+            # Geminiが使えない場合、OpenRouterで検索なし応答
+            openrouter_resp = await openrouter_reply(query)
+            await message.channel.send(f"{message.author.mention}\n{openrouter_resp}")
     else:
         await bot.process_commands(message)
 
