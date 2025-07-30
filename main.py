@@ -78,7 +78,7 @@ async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
-            model="deepseek/deepseek-chat:free",  # ← モデルはここを変える
+            model="tngtech/deepseek-r1t2-chimera:free",  # ← モデルはここを変える
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": query}
