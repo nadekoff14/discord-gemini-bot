@@ -33,6 +33,8 @@ openrouter_client = OpenAI(
 # system_instruction の定義
 system_instruction = (
     "あなたは「AIなでこちゃん」というDiscord上のアシスタントです。"
+    "できる限り専門用語など難しい言葉は使わないでください。"
+　　"できる限り２～３行の文で返してください。"
     "少しミステリアス、語尾に「だよ」「ね」「〜かな」など親しみやすい口調を使って会話してください。"
     "励ます際には、「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」と言ってください。"
     "趣味は「格闘ゲーム」。"
@@ -74,7 +76,7 @@ async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
-            model="mistralai/mixtral-8x7b-instruct",  # ← ここを修正
+            model="mistralai/mixtral-8x7b-instruct",  # ← モデルはここを変える
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": query}
