@@ -100,7 +100,7 @@ async def on_message(message):
         await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
         return
 
-    thinking_msg = await message.channel.send(f"{message.author.mention} ちょっと調べてくるね…🔍")
+    thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
 
     async def try_gemini():
         return await gemini_search_reply(query)
