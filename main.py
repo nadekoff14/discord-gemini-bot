@@ -39,7 +39,7 @@ system_instruction = (
     "自分以外のAIに関する情報を提示する時は、感情がない様な謎が残る様な感じの言葉で返す。"
 )
 
-# 検索関数（SerpApi）
+# SerpApiでの検索関数
 def serpapi_search(query):
     url = "https://serpapi.com/search"
     params = {
@@ -48,33 +48,42 @@ def serpapi_search(query):
         "gl": "jp",
         "api_key": SERPAPI_KEY
     }
-    res = requests.get(url, params=params)
-    data = res.json()
-    if "answer_box" in data and "answer" in data["answer_box"]:
-        return data["answer_box"]["answer"]
-    elif "organic_results" in data and data["organic_results"]:
-        return data["organic_results"][0].get("snippet", "検索結果が見つからなかったかな…")
-    else:
-        return "検索結果が見つからなかったかな…"
+    try:
+        res = requests.get(url, params=params, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        if "answer_box" in data and "answer" in data["answer_box"]:
+            return data["answer_box"]["answer"]
+        elif "organic_results" in data and data["organic_results"]:
+            return data["organic_results"][0].get("snippet", "検索結果が見つからなかったかな…")
+        else:
+            return "検索結果が見つからなかったかな…"
+    except Exception as e:
+        print(f"[SerpAPIエラー] {e}")
+        return "検索サービスに接続できなかったかな…"
 
-# Gemini に質問 + 検索
+# Gemini に質問＋検索結果を含めて問い合わせ
 async def gemini_search_reply(query):
     search_result = serpapi_search(query)
     full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
     response = await asyncio.to_thread(chat.send_message, full_query)
     return response.text
 
-# OpenRouter に fallback（検索なし）
+# OpenRouter にフォールバック（検索なし）
 async def openrouter_reply(query):
-    completion = await asyncio.to_thread(
-        openrouter_client.chat.completions.create,
-        model="openrouter/google/gemma-7b-it",
-        messages=[
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": query}
-        ]
-    )
-    return completion.choices[0].message.content
+    try:
+        completion = await asyncio.to_thread(
+            openrouter_client.chat.completions.create,
+            model="mistralai/mixtral-8x7b-instruct",  # ← ここを修正
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": query}
+            ]
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[OpenRouterエラー] {e}")
+        return "ごめんね、ちょっと考えがまとまらなかったかも〜"
 
 @bot.event
 async def on_ready():
@@ -97,6 +106,7 @@ async def on_message(message):
         return await gemini_search_reply(query)
 
     try:
+        # 10秒以上かかったらOpenRouterへ切替え
         reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
     except (asyncio.TimeoutError, Exception):
         reply_text = await openrouter_reply(query)
@@ -104,5 +114,6 @@ async def on_message(message):
     await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
 
 bot.run(DISCORD_TOKEN)
+
 
 
