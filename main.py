@@ -78,7 +78,7 @@ async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
-            model="openchat/openchat-3.5",  # ← モデルはここを変える
+            model="x-ai/grok-4",  # ← モデルはここを変える
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": query}
