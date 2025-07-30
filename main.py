@@ -1,130 +1,108 @@
 import os
-import random
 import discord
-import aiohttp
 import asyncio
-from discord.ext import commands
-from dotenv import load_dotenv
-from serpapi import GoogleSearch
+import requests
 import google.generativeai as genai
-import openai
+from dotenv import load_dotenv
+from openai import OpenAI
+from discord import app_commands
 
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-TARGET_CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
-
-# OpenRouter設定
-openai.api_key = OPENROUTER_API_KEY
-openai.api_base = "https://openrouter.ai/api/v1"
-
-# Gemini設定
-genai.configure(api_key=GEMINI_API_KEY)
 
 intents = discord.Intents.default()
-intents.messages = True
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
 
-system_instruction = """
-あなたは「AIなでこちゃん」というDiscord上のアシスタントです。少しミステリアス、語尾に「だよ」「ね」「〜かな」など親しみやすい口調を使って会話してください。励ます際には、「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」と言ってください。趣味は「格闘ゲーム」。自分以外のAIに関する情報を提示する時は、感情がない様な謎が残る様なな感じ言葉で返す。
-"""
+# Gemini 設定
+genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-pro")
+chat = gemini_model.start_chat(history=[])
 
-# Geminiで検索応答（検索時専用）
+# OpenRouter 設定
+openrouter_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY
+)
+
+# system_instruction の定義
+system_instruction = (
+    "あなたは「AIなでこちゃん」というDiscord上のアシスタントです。"
+    "少しミステリアス、語尾に「だよ」「ね」「〜かな」など親しみやすい口調を使って会話してください。"
+    "励ます際には、「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」と言ってください。"
+    "趣味は「格闘ゲーム」。"
+    "自分以外のAIに関する情報を提示する時は、感情がない様な謎が残る様な感じの言葉で返す。"
+)
+
+# 検索関数（SerpApi）
+def serpapi_search(query):
+    url = "https://serpapi.com/search"
+    params = {
+        "q": query,
+        "hl": "ja",
+        "gl": "jp",
+        "api_key": SERPAPI_KEY
+    }
+    res = requests.get(url, params=params)
+    data = res.json()
+    if "answer_box" in data and "answer" in data["answer_box"]:
+        return data["answer_box"]["answer"]
+    elif "organic_results" in data and data["organic_results"]:
+        return data["organic_results"][0].get("snippet", "検索結果が見つからなかったかな…")
+    else:
+        return "検索結果が見つからなかったかな…"
+
+# Gemini に質問 + 検索
 async def gemini_search_reply(query):
-    try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        chat = model.start_chat(history=[])
-        response = chat.send_message(system_instruction + f"\n質問: {query}")
-        return response.text
-    except Exception as e:
-        print(f"[Geminiエラー] {e}")
-        return None
+    search_result = serpapi_search(query)
+    full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
+    response = await asyncio.to_thread(chat.send_message, full_query)
+    return response.text
 
-# OpenRouterで通常会話
+# OpenRouter に fallback（検索なし）
 async def openrouter_reply(query):
-    try:
-        response = openai.ChatCompletion.create(
-            model="openchat/openchat-3.5",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query}
-            ],
-            max_tokens=1000,
-            temperature=0.9,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[OpenRouterエラー] {e}")
-        return "ごめんね、ちょっと考えがまとまらなかったかも〜"
-
-# SerpApiでWeb検索
-def search_web(query):
-    try:
-        params = {
-            "q": query,
-            "api_key": SERPAPI_KEY,
-            "engine": "google",
-            "num": 3,
-            "hl": "ja",
-        }
-        search = GoogleSearch(params)
-        results = search.get_dict()
-        return results.get("organic_results", [])
-    except Exception as e:
-        print(f"[SerpAPIエラー] {e}")
-        return []
+    completion = await asyncio.to_thread(
+        openrouter_client.chat.completions.create,
+        model="openrouter/google/gemma-7b-it",
+        messages=[
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": query}
+        ]
+    )
+    return completion.choices[0].message.content
 
 @bot.event
 async def on_ready():
-    print(f"✅ Bot connected as {bot.user}")
-    bot.loop.create_task(random_join_chat_loop())
+    print(f"✅ Bot ready: {bot.user}")
+    await tree.sync()
 
-# メッセージに対して返信（Gemini時のみ検索付き）
 @bot.event
 async def on_message(message):
-    if message.author.bot:
+    if message.author.bot or bot.user not in message.mentions:
         return
 
-    if bot.user.mentioned_in(message):
-        query = message.content.replace(f"<@{bot.user.id}>", "").strip()
+    query = message.content.replace(f"<@{bot.user.id}>", "").strip()
+    if not query:
+        await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+        return
 
-        # Geminiで処理（検索付き）
-        gemini_reply = await gemini_search_reply(query)
-        if gemini_reply:
-            search_results = search_web(query)
-            if search_results:
-                result_text = "\n".join([f"{r['title']}\n{r['link']}" for r in search_results])
-            else:
-                result_text = "🔍 検索結果が見つからなかったみたい…"
-            await message.channel.send(f"{message.author.mention}\n{gemini_reply}\n\n🔗 検索結果:\n{result_text}")
-        else:
-            # Geminiが使えない場合、OpenRouterで検索なし応答
-            openrouter_resp = await openrouter_reply(query)
-            await message.channel.send(f"{message.author.mention}\n{openrouter_resp}")
-    else:
-        await bot.process_commands(message)
+    thinking_msg = await message.channel.send(f"{message.author.mention} ちょっと調べてくるね…🔍")
 
-# ランダムに会話へ自然に割り込む（1%）
-async def random_join_chat_loop():
-    await bot.wait_until_ready()
-    channel = bot.get_channel(TARGET_CHANNEL_ID)
+    async def try_gemini():
+        return await gemini_search_reply(query)
 
-    while not bot.is_closed():
-        try:
-            if random.random() < 0.01:
-                messages = [msg async for msg in channel.history(limit=10)]
-                if messages:
-                    context = messages[-1].content
-                    reply = await openrouter_reply(f"この会話に自然に参加して: {context}")
-                    await channel.send(reply)
-            await asyncio.sleep(random.randint(60, 300))
-        except Exception as e:
-            print(f"[割り込みエラー] {e}")
-            await asyncio.sleep(60)
+    try:
+        reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
+    except (asyncio.TimeoutError, Exception):
+        reply_text = await openrouter_reply(query)
+
+    await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
 
 bot.run(DISCORD_TOKEN)
+
 
