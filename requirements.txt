@@ -1,4 +1,5 @@
 discord.py
 python-dotenv
 google-generativeai
-google-search-results 
+google-search-results
+openai>=1.0.0
