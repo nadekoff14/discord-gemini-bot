@@ -118,7 +118,7 @@ async def on_message(message):
         return
 
     # 🌟 5%の確率で過去10件を振り返って自然に返す
-    if random.random() < 0.05:
+    if random.random() < 0.5:
         try:
             history = []
             async for msg in message.channel.history(limit=20, oldest_first=False):
