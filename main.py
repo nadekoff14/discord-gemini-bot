@@ -117,8 +117,8 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 🌟 5%の確率で過去10件を振り返って自然に返す
-    if random.random() < 0.05:
+    # 🌟 3%の確率で過去10件を振り返って自然に返す
+    if random.random() < 0.03:
         try:
             history = []
             async for msg in message.channel.history(limit=20, oldest_first=False):
