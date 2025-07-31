@@ -1,6 +1,7 @@
 import os
 import discord
 import asyncio
+import random
 import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -43,7 +44,6 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください。"
 )
 
-# SerpApiでの検索関数
 def serpapi_search(query):
     url = "https://serpapi.com/search"
     params = {
@@ -66,19 +66,17 @@ def serpapi_search(query):
         print(f"[SerpAPIエラー] {e}")
         return "検索サービスに接続できなかったかな…"
 
-# Gemini に質問＋検索結果を含めて問い合わせ
 async def gemini_search_reply(query):
     search_result = serpapi_search(query)
     full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
     response = await asyncio.to_thread(chat.send_message, full_query)
     return response.text
 
-# OpenRouter にフォールバック（検索なし）
 async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
-            model="tngtech/deepseek-r1t2-chimera:free",  # ← モデルはここを変える
+            model="tngtech/deepseek-r1t2-chimera:free",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": query}
@@ -96,26 +94,48 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    if message.author.bot or bot.user not in message.mentions:
+    if message.author.bot:
         return
 
-    query = message.content.replace(f"<@{bot.user.id}>", "").strip()
-    if not query:
-        await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+    # 通常のメンション会話処理
+    if bot.user in message.mentions:
+        query = message.content.replace(f"<@{bot.user.id}>", "").strip()
+        if not query:
+            await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+            return
+
+        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
+
+        async def try_gemini():
+            return await gemini_search_reply(query)
+
+        try:
+            reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
+        except (asyncio.TimeoutError, Exception):
+            reply_text = await openrouter_reply(query)
+
+        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
-
-    async def try_gemini():
-        return await gemini_search_reply(query)
-
-    try:
-        # 10秒以上かかったらOpenRouterへ切替え
-        reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-    except (asyncio.TimeoutError, Exception):
-        reply_text = await openrouter_reply(query)
-
-    await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
+    # 🌟 5%の確率で過去10件を振り返って自然に返す
+    if random.random() < 0.05:
+        try:
+            history = []
+            async for msg in message.channel.history(limit=20, oldest_first=False):
+                if not msg.author.bot and msg.content.strip():
+                    history.append(f"{msg.author.display_name}: {msg.content.strip()}")
+                if len(history) >= 10:
+                    break
+            history.reverse()
+            history_text = "\n".join(history)
+            prompt = (
+                f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
+                f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
+            )
+            response = await openrouter_reply(prompt)
+            await message.channel.send(response)
+        except Exception as e:
+            print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
 
