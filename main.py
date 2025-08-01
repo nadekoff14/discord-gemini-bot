@@ -1,4 +1,4 @@
-import os
+import os 
 import discord
 import asyncio
 import random
@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 # 定数
 IDLE_TIMEOUT = 300  # 秒（5分）
 DELETE_DELAY = 120  # 秒（2分）
-BOT_DELETE_WINDOW = 300  # 削除対象の投稿：過去5分間
+BOT_DELETE_WINDOW = 480  # 削除対象の投稿：過去8分間
 
 last_message_time = datetime.utcnow()
 watching_channel_id = 637640640624328712  # ←適切なチャンネルIDに置き換えて
