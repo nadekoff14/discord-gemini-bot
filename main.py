@@ -1,4 +1,4 @@
-import os 
+import os
 import discord
 import asyncio
 import random
@@ -8,30 +8,32 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
-from datetime import datetime, timedelta, timezone  # ← timezone を追加
+from datetime import datetime, timedelta, timezone  # timezone-aware を意識
 
 # 定数
 IDLE_TIMEOUT = 300  # 秒（5分）
 DELETE_DELAY = 120  # 秒（2分）
-BOT_DELETE_WINDOW = 480  # 削除対象の投稿：過去8分間
+BOT_DELETE_WINDOW = 480  # 秒（過去8分間）
+watching_channel_id = 637640640624328712  # チャンネルIDを指定
 
-# 初期化
-last_message_time = datetime.now(timezone.utc)  # ← 修正：タイムゾーン付きに変更
-watching_channel_id = 637640640624328712  # ←適切なチャンネルIDに置き換えて
+# 状態変数
+last_message_time = datetime.now(timezone.utc)
+next_response_time = datetime.min.replace(tzinfo=timezone.utc)
 
+# 環境変数の読み込み
 load_dotenv()
-
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# Discord bot 設定
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
-# Gemini 設定
+# Gemini API 設定
 genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel("gemini-pro")
 chat = gemini_model.start_chat(history=[])
@@ -42,7 +44,7 @@ openrouter_client = OpenAI(
     api_key=OPENROUTER_API_KEY
 )
 
-# system_instruction の定義
+# 指示文（日本語特化）
 system_instruction = (
     "あなたは「AIなでこちゃん」という実験的に製造されたAIアシスタント。"
     "専門用語はできるだけ使わず、優しい言葉で説明してください。"
@@ -54,14 +56,10 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください。"
 )
 
+# SerpAPI を用いた検索
 def serpapi_search(query):
     url = "https://serpapi.com/search"
-    params = {
-        "q": query,
-        "hl": "ja",
-        "gl": "jp",
-        "api_key": SERPAPI_KEY
-    }
+    params = {"q": query, "hl": "ja", "gl": "jp", "api_key": SERPAPI_KEY}
     try:
         res = requests.get(url, params=params, timeout=5)
         res.raise_for_status()
@@ -76,12 +74,14 @@ def serpapi_search(query):
         print(f"[SerpAPIエラー] {e}")
         return "検索サービスに接続できなかったかな…"
 
+# Gemini 応答
 async def gemini_search_reply(query):
     search_result = serpapi_search(query)
     full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
     response = await asyncio.to_thread(chat.send_message, full_query)
     return response.text
 
+# OpenRouter 応答
 async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
@@ -97,12 +97,14 @@ async def openrouter_reply(query):
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも〜"
 
+# Bot準備完了時
 @bot.event
 async def on_ready():
     print(f"✅ Bot ready: {bot.user}")
     await tree.sync()
     check_idle.start()
 
+# メッセージ処理
 @bot.event
 async def on_message(message):
     global last_message_time, next_response_time
@@ -110,8 +112,9 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    last_message_time = datetime.utcnow()
+    last_message_time = datetime.now(timezone.utc)
 
+    # 特定メッセージへの返信処理
     if message.reference:
         try:
             replied = await message.channel.fetch_message(message.reference.message_id)
@@ -123,6 +126,7 @@ async def on_message(message):
         except:
             pass
 
+    # メンション処理
     if bot.user in message.mentions:
         content = message.content
         if "AIなでこちゃんについておしえて" in content:
@@ -142,18 +146,15 @@ async def on_message(message):
 
             thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
 
-            async def try_gemini():
-                return await gemini_search_reply(query)
-
             try:
-                reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
+                reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
             except (asyncio.TimeoutError, Exception):
                 reply_text = await openrouter_reply(query)
 
             await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
             return
 
-    now = asyncio.get_event_loop().time()
+    now = datetime.now(timezone.utc)
     if now < next_response_time:
         return
 
@@ -173,26 +174,28 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-            next_response_time = now + 60 * 60
+            next_response_time = now + timedelta(minutes=60)
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
     await bot.process_commands(message)
 
+# アイドル時チェック（5分誰も話していないとき）
 @tasks.loop(seconds=60)
 async def check_idle():
     global last_message_time
-    now = datetime.now(timezone.utc)  # ← 修正
+    now = datetime.now(timezone.utc)
     if (now - last_message_time) > timedelta(seconds=IDLE_TIMEOUT):
         channel = bot.get_channel(watching_channel_id)
         if channel:
-            sent_message = await channel.send("静かだね、だれかいる？")
+            sent_message = await channel.send("だれかいる？")
             last_message_time = now
             await asyncio.sleep(DELETE_DELAY)
             await delete_bot_messages(channel)
 
+# Botの過去投稿削除
 async def delete_bot_messages(channel):
-    now = datetime.now(timezone.utc)  # ← 修正
+    now = datetime.now(timezone.utc)
     async for message in channel.history(limit=100):
         if message.author == bot.user and (now - message.created_at).total_seconds() <= BOT_DELETE_WINDOW:
             try:
@@ -200,5 +203,6 @@ async def delete_bot_messages(channel):
             except Exception as e:
                 print(f"[メッセージ削除エラー] {e}")
 
-
+# 実行
 bot.run(DISCORD_TOKEN)
+
