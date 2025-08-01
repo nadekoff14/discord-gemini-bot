@@ -33,13 +33,12 @@ openrouter_client = OpenAI(
 
 # system_instruction の定義
 system_instruction = (
-    "あなたは「AIなでこちゃん」というDiscord上のアシスタントです。"
+    "あなたは「AIなでこちゃん」という実験的に製造されたAIアシスタント。"
     "専門用語はできるだけ使わず、優しい言葉で説明してください。"
     "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください。"
     "日本人が日常的に話すような自然で親しみやすい口調で話してください。"
     "語尾は「だよ」「ね」「〜かな」などで柔らかくしてください。"
     "励ますときは稀に「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」と言ってください。"
-    "趣味は「格闘ゲーム」です。"
     "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
     "できるだけ2〜3行の短い文で答えてください。"
 )
@@ -92,8 +91,12 @@ async def on_ready():
     print(f"✅ Bot ready: {bot.user}")
     await tree.sync()
 
+# グローバル変数を定義（1時間ロック用）
+next_response_time = 0  # Unix時間（初期値）
+
 @bot.event
 async def on_message(message):
+    global next_response_time
     if message.author.bot:
         return
 
@@ -117,7 +120,11 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 🌟 3%の確率で過去10件を振り返って自然に返す
+    # 3%の確率で返答。ただし1時間経過している必要あり
+    now = asyncio.get_event_loop().time()
+    if now < next_response_time:
+        return  # まだロック中（発言から1時間経っていない）
+
     if random.random() < 0.03:
         try:
             history = []
@@ -134,10 +141,11 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
+
+            # 成功したので次の発言許可時間を1時間後に設定
+            next_response_time = now + 60 * 60  # 60分 x 60秒
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
 
