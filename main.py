@@ -8,14 +8,15 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone  # ← timezone を追加
 
 # 定数
 IDLE_TIMEOUT = 300  # 秒（5分）
 DELETE_DELAY = 120  # 秒（2分）
 BOT_DELETE_WINDOW = 480  # 削除対象の投稿：過去8分間
 
-last_message_time = datetime.utcnow()
+# 初期化
+last_message_time = datetime.now(timezone.utc)  # ← 修正：タイムゾーン付きに変更
 watching_channel_id = 637640640624328712  # ←適切なチャンネルIDに置き換えて
 
 load_dotenv()
@@ -181,22 +182,23 @@ async def on_message(message):
 @tasks.loop(seconds=60)
 async def check_idle():
     global last_message_time
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)  # ← 修正
     if (now - last_message_time) > timedelta(seconds=IDLE_TIMEOUT):
         channel = bot.get_channel(watching_channel_id)
         if channel:
-            sent_message = await channel.send("だれかいる？")
+            sent_message = await channel.send("静かだね、だれかいる？")
             last_message_time = now
             await asyncio.sleep(DELETE_DELAY)
             await delete_bot_messages(channel)
 
 async def delete_bot_messages(channel):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)  # ← 修正
     async for message in channel.history(limit=100):
         if message.author == bot.user and (now - message.created_at).total_seconds() <= BOT_DELETE_WINDOW:
             try:
                 await message.delete()
-            except:
-                pass
+            except Exception as e:
+                print(f"[メッセージ削除エラー] {e}")
+
 
 bot.run(DISCORD_TOKEN)
