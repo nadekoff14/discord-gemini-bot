@@ -19,6 +19,7 @@ watching_channel_id = 637640640624328712  # チャンネルIDを指定
 # 状態変数
 last_message_time = datetime.now(timezone.utc)
 next_response_time = datetime.min.replace(tzinfo=timezone.utc)
+suppress_random_reply = False
 
 # 環境変数の読み込み
 load_dotenv()
@@ -158,6 +159,9 @@ async def on_message(message):
     if now < next_response_time:
         return
 
+    if suppress_random_reply:
+        return
+
     if random.random() < 0.03:
         try:
             history = []
@@ -183,15 +187,17 @@ async def on_message(message):
 # アイドル時チェック（5分誰も話していないとき）
 @tasks.loop(seconds=60)
 async def check_idle():
-    global last_message_time
+    global last_message_time, suppress_random_reply
     now = datetime.now(timezone.utc)
     if (now - last_message_time) > timedelta(seconds=IDLE_TIMEOUT):
         channel = bot.get_channel(watching_channel_id)
         if channel:
-            sent_message = await channel.send("だれかいる？")
+            await channel.send("だれかいる？")
             last_message_time = now
-            await asyncio.sleep(DELETE_DELAY)
+            suppress_random_reply = True
+            await asyncio.sleep(BOT_DELETE_WINDOW)
             await delete_bot_messages(channel)
+            suppress_random_reply = False
 
 # Botの過去投稿削除
 async def delete_bot_messages(channel):
@@ -205,4 +211,3 @@ async def delete_bot_messages(channel):
 
 # 実行
 bot.run(DISCORD_TOKEN)
-
