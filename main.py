@@ -84,27 +84,35 @@ async def openrouter_reply(query):
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
+
+is_modal_active = False  # モーダル中フラグを追加
+
 class QuestionModal(Modal, title="問題に答えてね"):
-    answer = TextInput(label="私の名前は？", style=discord.TextStyle.short)
+    answer = TextInput(label="私の名前は？制限時間は3分間だよ。", style=discord.TextStyle.short)
 
     async def on_submit(self, interaction: discord.Interaction):
-        user_answer = self.answer.value.strip().lower()  # 前後空白除去＆小文字化
-        correct_answer = "968900402072387675"  # 例：正解
+        global is_modal_active
+        user_answer = self.answer.value.strip().lower()
+        correct_answer = "968900402072387675"
 
         if user_answer == correct_answer:
             reply = "正解！すごいね・・・"
         else:
             reply = "間違っているよ・・・もう一度考えてみてね・・・"
 
+        is_modal_active = False  # モーダル閉じたら解除
         await interaction.response.send_message(reply, ephemeral=True)
 
 class QuestionView(View):
     @discord.ui.button(label="答える…", style=discord.ButtonStyle.primary)
     async def open_modal(self, interaction: discord.Interaction, button: Button):
+        global is_modal_active
+        is_modal_active = True
         await interaction.response.send_modal(QuestionModal())
 
-@tasks.loop(minutes=3)
+@tasks.loop(minutes=6)
 async def check_online_members():
+    global is_modal_active
     try:
         print("オンラインチェック開始")
         guild = bot.get_guild(GUILD_ID)
@@ -113,13 +121,19 @@ async def check_online_members():
             return
         online = [m for m in guild.members if not m.bot and m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)]
         print(f"オンライン人数: {len(online)}")
-        if len(online) >= 4:
+        if len(online) >= 6 and not is_modal_active:
             channel = guild.get_channel(CHANNEL_ID)
             if not channel:
                 print(f"チャンネルが見つかりません: {CHANNEL_ID}")
                 return
-            await channel.send("みんな集まってるね・・・ちょっと質問してもいい？", view=QuestionView())
+            msg = await channel.send("みんな集まってるね・・・ちょっと質問してもいい？", view=QuestionView())
             print("モーダル投稿用のボタンを送信しました。")
+            await asyncio.sleep(180)  # 3分後
+            try:
+                await msg.delete()
+                print("3分後にメッセージを削除しました。")
+            except Exception as e:
+                print(f"[削除失敗] {e}")
     except Exception as e:
         print(f"[check_online_membersエラー] {e}")
 
@@ -133,9 +147,16 @@ next_response_time = 0
 
 @bot.event
 async def on_message(message):
-    global next_response_time
+    global next_response_time, is_modal_active
+
     if message.author.bot:
         return
+
+    # モーダル表示中なら他の処理を無視
+    if is_modal_active:
+        return
+
+    # メンション応答
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -150,6 +171,8 @@ async def on_message(message):
             reply_text = await openrouter_reply(query)
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
+
+    # 自然参加メッセージ
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
         return
