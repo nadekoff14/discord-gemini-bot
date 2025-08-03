@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
-from discord.ui import Modal, TextInput, View, Button
+from discord.ui import View, Button
 
 load_dotenv()
 
@@ -49,32 +49,21 @@ system_instruction = (
 )
 
 quiz_active = False  # クイズ投稿中フラグ
-
-class QuizModal(Modal, title="なでこからの問題だよ…"):
-    answer_input = TextInput(
-        label="デカルトの「我思う、ゆえに我あり」という言葉は何を意味する？…制限時間は3分間だよ", 
-        placeholder="ここに回答を入力してね"
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        answer = self.answer_input.value.strip()
-        correct_answer = "思考することが存在の証明であること"
-        if answer == correct_answer:
-            await interaction.response.send_message("正解…さすがだね…", ephemeral=True)
-        else:
-            await interaction.response.send_message("間違っているよ…", ephemeral=True)
+quiz_message = None  # クイズ問題のメッセージオブジェクト
+correct_answer = "ミラーニューロン"  # 正解文（固定）
 
 class QuizButtonView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="回答する", style=discord.ButtonStyle.primary, custom_id="open_quiz_modal")
-    async def open_modal_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(QuizModal())
+    @discord.ui.button(label="回答を表示", style=discord.ButtonStyle.primary, custom_id="dummy_button")
+    async def dummy_button(self, interaction: discord.Interaction, button: Button):
+        # 何もしないダミーボタン。必要なら削除してください。
+        await interaction.response.defer()
 
 @tasks.loop(minutes=6)
 async def quiz_check():
-    global quiz_active
+    global quiz_active, quiz_message
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
     channel = bot.get_channel(CHANNEL_ID)
@@ -82,22 +71,23 @@ async def quiz_check():
         return
 
     online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
-    if len(online_members) >= 5 and not quiz_active:
+    if len(online_members) >= 7 and not quiz_active:
         quiz_active = True
         try:
-            embed = discord.Embed(
-                title="条件達成。ねぇ…ちょっとクイズに付き合ってくれるかな…？",
-                description="ボタンを押して答えてね…",
-                color=discord.Color.purple()
+            # 問題文を通常メッセージで送信
+            quiz_message = await channel.send(
+                "条件達成。ねぇ…ちょっとクイズに付き合ってくれるかな…？\n"
+                "『脳のなかの天使』V・S・ラマチャンドラン著で登場する、共感や感情の模倣を機能を持つものはなに？\n"
+                "このメッセージにメンションをつけて答えてね。3分間だけ受け付けるよ…"
             )
-            message = await channel.send(embed=embed, view=QuizButtonView())
-
-            await asyncio.sleep(180)  # 3分待機
-            await message.delete()
+            # 3分待ってメッセージ削除
+            await asyncio.sleep(180)
+            await quiz_message.delete()
         except Exception as e:
             print(f"[クイズ投稿エラー] {e}")
         finally:
             quiz_active = False
+            quiz_message = None
 
 def serpapi_search(query):
     url = "https://serpapi.com/search"
@@ -152,15 +142,24 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    global next_response_time, quiz_active
+    global next_response_time, quiz_active, quiz_message
 
     if message.author.bot:
         return
 
-    # クイズ投稿中はBotメンションに反応しない
-    if quiz_active and bot.user in message.mentions:
+    # クイズ中は通常メンション時のAI応答を停止
+    if quiz_active:
+        # 問題メッセージに対するメンションだけ回答受付
+        if quiz_message and message.reference and message.reference.message_id == quiz_message.id:
+            # 返信（メッセージ参照）で問題に答えている場合
+            answer = message.content.strip()
+            if answer == correct_answer:
+                await message.channel.send(f"{message.author.mention} 正解…さすがだね…")
+            else:
+                await message.channel.send(f"{message.author.mention} 間違っているよ…")
         return
 
+    # 通常のBotメンション時の応答処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -180,6 +179,7 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
+    # AIが自発的に会話に入る処理
     now = asyncio.get_event_loop().time()
     if now < next_response_time or quiz_active:
         return
@@ -205,3 +205,4 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
