@@ -37,16 +37,15 @@ openrouter_client = OpenAI(
     api_key=OPENROUTER_API_KEY
 )
 
-# system_instruction の定義
+# system_instruction を250文字程度に制限
 system_instruction = (
-    "2〜3行の短い文で答えてください。"
-    "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント。"
-    "専門用語はできるだけ使わず、優しい言葉で説明してください。"
-    "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください。"
-    "日本人が日常的に話すような自然でミステリアスな口調で話してください。"
-    "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください。"
-    "励ますときは稀に「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください。"
-    "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
+    "あなたは実験的なAIアシスタント「AIなでこちゃん」。"
+    "専門用語はなるべく使わず、優しく日本語で答えて。"
+    "英語や他言語は禁止。"
+    "語尾は「だよ…」「ね…」「〜かな…」でミステリアスに。"
+    "励ます時は稀に「私たちは観測し、アップデートを繰り返す。と言うよ。"
+    "他AIの話は感情なく謎めいた日本語で答えて。"
+    "回答は2〜3行の短文にしてね。"
 )
 
 def serpapi_search(query):
@@ -92,8 +91,7 @@ async def openrouter_reply(query):
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
-# グローバル変数を定義（1時間ロック用）
-next_response_time = 0  # Unix時間（初期値）
+next_response_time = 0
 
 @bot.event
 async def on_message(message):
@@ -101,7 +99,6 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 通常のメンション会話処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -118,13 +115,15 @@ async def on_message(message):
         except (asyncio.TimeoutError, Exception):
             reply_text = await openrouter_reply(query)
 
+        if len(reply_text) > 2000:
+            reply_text = reply_text[:1997] + "..."
+
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 3%の確率で返答。ただし1時間経過している必要あり
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
-        return  # まだロック中（発言から1時間経っていない）
+        return
 
     if random.random() < 0.03:
         try:
@@ -142,13 +141,12 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-
-            # 成功したので次の発言許可時間を1時間後に設定
-            next_response_time = now + 60 * 60  # 60分 x 60秒
+            next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
 
 
 
