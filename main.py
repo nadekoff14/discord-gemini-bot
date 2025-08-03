@@ -7,6 +7,8 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
+from discord.ext import tasks
+from discord.ui import Modal, View, Button, TextInput
 
 load_dotenv()
 
@@ -14,9 +16,13 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GUILD_ID = int(os.getenv("GUILD_ID", "0"))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
+intents.presences = True
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
@@ -45,12 +51,7 @@ system_instruction = (
 
 def serpapi_search(query):
     url = "https://serpapi.com/search"
-    params = {
-        "q": query,
-        "hl": "ja",
-        "gl": "jp",
-        "api_key": SERPAPI_KEY
-    }
+    params = {"q": query, "hl": "ja", "gl": "jp", "api_key": SERPAPI_KEY}
     try:
         res = requests.get(url, params=params, timeout=5)
         res.raise_for_status()
@@ -76,55 +77,64 @@ async def openrouter_reply(query):
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
             model="tngtech/deepseek-r1t2-chimera:free",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query}
-            ]
+            messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": query}]
         )
         return completion.choices[0].message.content.strip()
     except Exception as e:
         print(f"[OpenRouterエラー] {e}")
-        return "ごめんね、ちょっと考えがまとまらなかったかも〜"
+        return "ごめんね、ちょっと考えがまとまらなかったかも"
+
+class QuestionModal(Modal, title="ちょっと教えてほしい…"):
+    answer = TextInput(label="今、どんな気分？", style=discord.TextStyle.paragraph)
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.send_message(f"ふむふむ…「{self.answer.value}」なんだね・・・", ephemeral=True)
+
+class QuestionView(View):
+    @discord.ui.button(label="答える…", style=discord.ButtonStyle.primary)
+    async def open_modal(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(QuestionModal())
+
+@tasks.loop(minutes=3)
+async def check_online_members():
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return
+    online = [m for m in guild.members if not m.bot and m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)]
+    if len(online) >= 4:
+        channel = guild.get_channel(CHANNEL_ID)
+        if channel:
+            await channel.send("みんな集まってるね・・・ちょっと質問してもいい？", view=QuestionView())
 
 @bot.event
 async def on_ready():
     print(f"✅ Bot ready: {bot.user}")
     await tree.sync()
+    check_online_members.start()
 
-# グローバル変数を定義（1時間ロック用）
-next_response_time = 0  # Unix時間（初期値）
+next_response_time = 0
 
 @bot.event
 async def on_message(message):
     global next_response_time
     if message.author.bot:
         return
-
-    # 通常のメンション会話処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
             return
-
         thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
-
         async def try_gemini():
             return await gemini_search_reply(query)
-
         try:
             reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-        except (asyncio.TimeoutError, Exception):
+        except:
             reply_text = await openrouter_reply(query)
-
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
-
-    # 3%の確率で返答。ただし1時間経過している必要あり
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
-        return  # まだロック中（発言から1時間経っていない）
-
+        return
     if random.random() < 0.03:
         try:
             history = []
@@ -135,20 +145,14 @@ async def on_message(message):
                     break
             history.reverse()
             history_text = "\n".join(history)
-            prompt = (
-                f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
-                f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
-            )
+            prompt = f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\nこれらを読んで自然に会話に入ってみてください。\n\n{history_text}"
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-
-            # 成功したので次の発言許可時間を1時間後に設定
-            next_response_time = now + 60 * 60  # 60分 x 60秒
+            next_response_time = now + 3600
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
 
 
 
