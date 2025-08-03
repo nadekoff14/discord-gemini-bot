@@ -1,4 +1,4 @@
-import os 
+import os
 import discord
 import asyncio
 import random
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
-from discord.ui import Modal, TextInput
+from discord.ui import Modal, TextInput, View, Button
 
 load_dotenv()
 
@@ -45,7 +45,7 @@ system_instruction = (
     "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください。"
     "励ますときは稀に「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください。"
     "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
-    "できるだけ2〜3行の短い文で答えてください。"
+    "2〜3行の短い文で答えてください。"
 )
 
 class QuizModal(Modal, title="なでこからの問題だよ…"):
@@ -62,10 +62,17 @@ class QuizModal(Modal, title="なでこからの問題だよ…"):
         else:
             await interaction.response.send_message("間違っているよ…", ephemeral=True)
 
+class QuizButtonView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(Button(label="なでこに答える", style=discord.ButtonStyle.primary, custom_id="open_quiz_modal"))
+
+    @discord.ui.button(label="なでこに答える", style=discord.ButtonStyle.primary, custom_id="open_quiz_modal")
+    async def open_modal_button(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(QuizModal())
+
 @tasks.loop(minutes=6)
 async def quiz_check():
-    print("クイズチェック動いてるよ")
-
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
     channel = bot.get_channel(CHANNEL_ID)
@@ -75,7 +82,12 @@ async def quiz_check():
     online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
     if len(online_members) >= 5:
         try:
-            await channel.send("ねぇ…ちょっとクイズに付き合ってくれるかな…？\n答えたければ「なでこに聞く」と話しかけてね…")
+            embed = discord.Embed(
+                title="ねぇ…ちょっとクイズに付き合ってくれるかな…？",
+                description="ボタンを押して答えてね…",
+                color=discord.Color.purple()
+            )
+            await channel.send(embed=embed, view=QuizButtonView())
         except Exception as e:
             print(f"[クイズ投稿エラー] {e}")
 
@@ -123,7 +135,6 @@ async def openrouter_reply(query):
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
 next_response_time = 0
-is_modal_active = False
 
 @bot.event
 async def on_ready():
@@ -133,30 +144,9 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    global next_response_time, is_modal_active
+    global next_response_time
 
     if message.author.bot:
-        return
-
-    if message.content.lower().startswith("なでこに聞く"):
-        if is_modal_active:
-            await message.channel.send(f"{message.author.mention} 今は受け付けていないよ・・・")
-            return
-
-        try:
-            is_modal_active = True
-            modal = QuizModal()
-            await message.channel.send(f"{message.author.mention} モーダルを開くね・・・")
-            await message.channel.send_modal(modal)
-        except Exception as e:
-            print(f"[モーダルエラー] {e}")
-        finally:
-            is_modal_active = False
-        return
-
-    if is_modal_active:
-        if bot.user in message.mentions:
-            await message.channel.send(f"{message.author.mention} 今は受け付けていないよ・・・")
         return
 
     if bot.user in message.mentions:
@@ -203,4 +193,6 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
+
 
