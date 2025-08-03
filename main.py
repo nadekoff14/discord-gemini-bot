@@ -9,6 +9,7 @@ from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
 from discord.ui import Modal, View, Button, TextInput
+from discord.ext import tasks
 
 load_dotenv()
 
@@ -65,6 +66,9 @@ class QuizModal(Modal, title="なでこからの問題だよ…"):
 
 @tasks.loop(minutes=6)
 async def quiz_check():
+    # ここに6分ごとに実行したい処理を記述
+    print("クイズチェック動いてるよ")
+
     global modal_active
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
@@ -131,6 +135,11 @@ async def openrouter_reply(query):
 next_response_time = 0
 
 @bot.event
+async def on_ready():
+    print(f"{bot.user} でログインしました")
+    if not quiz_check.is_running():
+        quiz_check.start()  # ここでスタートさせる！
+
 async def on_message(message):
     global next_response_time, is_modal_active
 
