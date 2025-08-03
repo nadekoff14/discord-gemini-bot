@@ -33,7 +33,7 @@ openrouter_client = OpenAI(
 
 # system_instruction の定義
 system_instruction = (
-    "あなたは「AIなでこちゃん」という実験的に製造されたAIアシスタント。"
+    "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント。"
     "専門用語はできるだけ使わず、優しい言葉で説明してください。"
     "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください。"
     "日本人が日常的に話すような自然でミステリアスな口調で話してください。"
@@ -148,6 +148,7 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
 
 
 
