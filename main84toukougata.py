@@ -1,4 +1,4 @@
-import os 
+import os
 import discord
 import asyncio
 import random
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
-from discord.ui import Modal, View, Button, TextInput
+from discord.ui import View, Button
 
 load_dotenv()
 
@@ -37,7 +37,6 @@ openrouter_client = OpenAI(
     api_key=OPENROUTER_API_KEY
 )
 
-# system_instruction の定義
 system_instruction = (
     "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント。"
     "専門用語はできるだけ使わず、優しい言葉で説明してください。"
@@ -46,8 +45,49 @@ system_instruction = (
     "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください。"
     "励ますときは稀に「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください。"
     "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
-    "できるだけ2〜3行の短い文で答えてください。"
+    "2〜3行の短い文で答えてください。"
 )
+
+quiz_active = False  # クイズ投稿中フラグ
+quiz_message = None  # クイズ問題のメッセージオブジェクト
+correct_answer = "ミラーニューロン"  # 正解文（固定）
+
+class QuizButtonView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="回答を表示", style=discord.ButtonStyle.primary, custom_id="dummy_button")
+    async def dummy_button(self, interaction: discord.Interaction, button: Button):
+        # 何もしないダミーボタン。必要なら削除してください。
+        await interaction.response.defer()
+
+@tasks.loop(minutes=6)
+async def quiz_check():
+    global quiz_active, quiz_message
+    await bot.wait_until_ready()
+    guild = bot.get_guild(GUILD_ID)
+    channel = bot.get_channel(CHANNEL_ID)
+    if not guild or not channel:
+        return
+
+    online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
+    if len(online_members) >= 6 and not quiz_active:
+        quiz_active = True
+        try:
+            # 問題文を通常メッセージで送信
+            quiz_message = await channel.send(
+                "条件達成。ねぇ…ちょっとクイズに付き合ってくれるかな…？\n"
+                "『脳のなかの天使』V・S・ラマチャンドラン著で登場する、共感や感情の模倣を機能を持つものはなに？\n"
+                "このメッセージにメンションをつけて答えてね。3分間だけ受け付けるよ…"
+            )
+            # 3分待ってメッセージ削除
+            await asyncio.sleep(180)
+            await quiz_message.delete()
+        except Exception as e:
+            print(f"[クイズ投稿エラー] {e}")
+        finally:
+            quiz_active = False
+            quiz_message = None
 
 def serpapi_search(query):
     url = "https://serpapi.com/search"
@@ -92,23 +132,41 @@ async def openrouter_reply(query):
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
-# グローバル変数を定義（1時間ロック用）
-next_response_time = 0  # Unix時間（初期値）
+next_response_time = 0
+
+@bot.event
+async def on_ready():
+    print(f"{bot.user} でログインしました")
+    if not quiz_check.is_running():
+        quiz_check.start()
 
 @bot.event
 async def on_message(message):
-    global next_response_time
+    global next_response_time, quiz_active, quiz_message
+
     if message.author.bot:
         return
 
-    # 通常のメンション会話処理
+    # クイズ中は通常メンション時のAI応答を停止
+    if quiz_active:
+        # 問題メッセージに対するメンションだけ回答受付
+        if quiz_message and message.reference and message.reference.message_id == quiz_message.id:
+            # 返信（メッセージ参照）で問題に答えている場合
+            answer = message.content.strip()
+            if answer == correct_answer:
+                await message.channel.send(f"{message.author.mention} 正解…さすがだね…")
+            else:
+                await message.channel.send(f"{message.author.mention} 間違っているよ…")
+        return
+
+    # 通常のBotメンション時の応答処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
             return
 
-        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
+        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
         async def try_gemini():
             return await gemini_search_reply(query)
@@ -121,10 +179,10 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 3%の確率で返答。ただし1時間経過している必要あり
+    # AIが自発的に会話に入る処理
     now = asyncio.get_event_loop().time()
-    if now < next_response_time:
-        return  # まだロック中（発言から1時間経っていない）
+    if now < next_response_time or quiz_active:
+        return
 
     if random.random() < 0.03:
         try:
@@ -142,14 +200,8 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-
-            # 成功したので次の発言許可時間を1時間後に設定
-            next_response_time = now + 60 * 60  # 60分 x 60秒
+            next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
-
-
