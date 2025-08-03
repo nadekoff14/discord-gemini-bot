@@ -115,7 +115,7 @@ async def on_message(message):
         except (asyncio.TimeoutError, Exception):
             reply_text = await openrouter_reply(query)
 
-        if len(reply_text) > 2000:
+        if len(reply_text) > 250:
             reply_text = reply_text[:1997] + "..."
 
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
@@ -146,6 +146,7 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
 
 
 
