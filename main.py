@@ -84,15 +84,21 @@ async def openrouter_reply(query):
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
-class QuestionModal(Modal, title="ちょっと教えてほしい…"):
-    answer = TextInput(label="今、どんな気分？", style=discord.TextStyle.paragraph)
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"ふむふむ…「{self.answer.value}」なんだね・・・", ephemeral=True)
+class QuestionModal(Modal, title="問題に答えてね"):
+    answer = TextInput(label="私の名前は？", style=discord.TextStyle.short)
 
-class QuestionView(View):
-    @discord.ui.button(label="答える…", style=discord.ButtonStyle.primary)
-    async def open_modal(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(QuestionModal())
+    async def on_submit(self, interaction: discord.Interaction):
+        user_answer = self.answer.value.strip().lower()  # 前後空白除去＆小文字化
+        correct_answer = "968900402072387675"  # 例：正解は「たこ」
+
+        if user_answer == correct_answer:
+            reply = "正解！すごいね・・・"
+        else:
+            reply = "間違っているよ・・・もう一度考えてみてね・・・"
+
+        await interaction.response.send_message(reply, ephemeral=True)
+
+
 
 @tasks.loop(minutes=3)
 async def check_online_members():
@@ -162,6 +168,8 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
+
 
 
 
