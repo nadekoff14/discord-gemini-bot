@@ -1,4 +1,4 @@
-import os 
+import os
 import discord
 import asyncio
 import random
@@ -9,7 +9,6 @@ from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
 from discord.ui import Modal, View, Button, TextInput
-from discord.ext import tasks
 
 load_dotenv()
 
@@ -55,8 +54,6 @@ class QuizModal(Modal, title="なでこからの問題だよ…"):
     answer_input = TextInput(label="答えてみて…制限時間は3分間だよ", placeholder="デカルトの「我思う、ゆえに我あり」という言葉は何を意味する？")
 
     async def on_submit(self, interaction: discord.Interaction):
-        global modal_active
-        modal_active = False
         answer = self.answer_input.value.strip()
         correct_answer = "思考することが存在の証明であること"  # 任意の答えに変更
         if answer == correct_answer:
@@ -66,10 +63,8 @@ class QuizModal(Modal, title="なでこからの問題だよ…"):
 
 @tasks.loop(minutes=6)
 async def quiz_check():
-    # ここに6分ごとに実行したい処理を記述
     print("クイズチェック動いてるよ")
 
-    global modal_active
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
     channel = bot.get_channel(CHANNEL_ID)
@@ -78,15 +73,14 @@ async def quiz_check():
 
     online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
     if len(online_members) >= 5:
-        modal_active = True
         for member in online_members:
             try:
                 await member.send("ちょっとしたクイズに答えてくれるかな…？")
-                await member.send_modal(QuizModal())
+                modal = QuizModal()
+                await member.send_modal(modal)
+                await asyncio.sleep(180)  # 3分待つ
             except Exception as e:
                 print(f"[モーダル送信エラー] {e}")
-
-quiz_check.start()
 
 
 def serpapi_search(query):
@@ -133,20 +127,21 @@ async def openrouter_reply(query):
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
 next_response_time = 0
+is_modal_active = False
 
 @bot.event
 async def on_ready():
     print(f"{bot.user} でログインしました")
     if not quiz_check.is_running():
-        quiz_check.start()  # ここでスタートさせる！
+        quiz_check.start()
 
+@bot.event
 async def on_message(message):
     global next_response_time, is_modal_active
 
     if message.author.bot:
         return
 
-    # モーダル起動ワードに反応（例：なでこに聞く）
     if message.content.lower().startswith("なでこに聞く"):
         if is_modal_active:
             await message.channel.send(f"{message.author.mention} 今は受け付けていないよ・・・")
@@ -154,7 +149,7 @@ async def on_message(message):
 
         try:
             is_modal_active = True
-            modal = FeedbackModal(message.author)
+            modal = QuizModal()
             await message.channel.send(f"{message.author.mention} モーダルを開くね・・・")
             await message.channel.send_modal(modal)
         except Exception as e:
@@ -162,20 +157,18 @@ async def on_message(message):
             print(f"[モーダルエラー] {e}")
         return
 
-    # モーダルが開いている間は他の処理をスキップ
     if is_modal_active:
         if bot.user in message.mentions:
             await message.channel.send(f"{message.author.mention} 今は受け付けていないよ・・・")
         return
 
-    # 通常のメンション会話処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
             return
 
-        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
+        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
         async def try_gemini():
             return await gemini_search_reply(query)
@@ -188,7 +181,6 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 3%の確率で返答。ただし1時間ロックあり
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
         return
@@ -210,9 +202,8 @@ async def on_message(message):
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
 
-            next_response_time = now + 60 * 60  # 1時間ロック
+            next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
