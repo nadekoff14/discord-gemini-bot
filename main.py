@@ -89,7 +89,7 @@ class QuestionModal(Modal, title="問題に答えてね"):
 
     async def on_submit(self, interaction: discord.Interaction):
         user_answer = self.answer.value.strip().lower()  # 前後空白除去＆小文字化
-        correct_answer = "968900402072387675"  # 例：正解は「たこ」
+        correct_answer = "968900402072387675"  # 例：正解
 
         if user_answer == correct_answer:
             reply = "正解！すごいね・・・"
@@ -98,7 +98,10 @@ class QuestionModal(Modal, title="問題に答えてね"):
 
         await interaction.response.send_message(reply, ephemeral=True)
 
-
+class QuestionView(View):
+    @discord.ui.button(label="答える…", style=discord.ButtonStyle.primary)
+    async def open_modal(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(QuestionModal())
 
 @tasks.loop(minutes=3)
 async def check_online_members():
@@ -168,9 +171,6 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
-
 
 
 
