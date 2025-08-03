@@ -48,9 +48,51 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください。"
 )
 
+modal_active = False  # モーダルが開いているかどうか
+
+class QuizModal(Modal, title="なでこからの問題だよ…"):
+    answer_input = TextInput(label="答えてみて…制限時間は3分間だよ", placeholder="デカルトの「我思う、ゆえに我あり」という言葉は何を意味する？")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        global modal_active
+        modal_active = False
+        answer = self.answer_input.value.strip()
+        correct_answer = "思考することが存在の証明であること"  # 任意の答えに変更
+        if answer == correct_answer:
+            await interaction.response.send_message("正解…さすがだね…", ephemeral=True)
+        else:
+            await interaction.response.send_message("間違っているよ…", ephemeral=True)
+
+@tasks.loop(minutes=6)
+async def quiz_check():
+    global modal_active
+    await bot.wait_until_ready()
+    guild = bot.get_guild(GUILD_ID)
+    channel = bot.get_channel(CHANNEL_ID)
+    if not guild or not channel:
+        return
+
+    online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
+    if len(online_members) >= 5:
+        modal_active = True
+        for member in online_members:
+            try:
+                await member.send("ちょっとしたクイズに答えてくれるかな…？")
+                await member.send_modal(QuizModal())
+            except Exception as e:
+                print(f"[モーダル送信エラー] {e}")
+
+quiz_check.start()
+
+
 def serpapi_search(query):
     url = "https://serpapi.com/search"
-    params = {"q": query, "hl": "ja", "gl": "jp", "api_key": SERPAPI_KEY}
+    params = {
+        "q": query,
+        "hl": "ja",
+        "gl": "jp",
+        "api_key": SERPAPI_KEY
+    }
     try:
         res = requests.get(url, params=params, timeout=5)
         res.raise_for_status()
@@ -76,93 +118,72 @@ async def openrouter_reply(query):
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
             model="tngtech/deepseek-r1t2-chimera:free",
-            messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": query}]
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": query}
+            ]
         )
         return completion.choices[0].message.content.strip()
     except Exception as e:
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
-class QuestionModal(Modal, title="問題に答えてね"):
-    answer = TextInput(label="私の名前は？制限時間は3分間だよ。", style=discord.TextStyle.short)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        user_answer = self.answer.value.strip().lower()
-        correct_answer = "968900402072387675"
-
-        if user_answer == correct_answer:
-            reply = "正解！すごいね・・・"
-        else:
-            reply = "間違っているよ・・・もう一度考えてみてね・・・"
-
-        await interaction.response.send_message(reply, ephemeral=True)
-
-class QuestionView(View):
-    @discord.ui.button(label="答える…", style=discord.ButtonStyle.primary)
-    async def open_modal(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(QuestionModal())
-
-@tasks.loop(minutes=6)
-async def check_online_members():
-    try:
-        print("オンラインチェック開始")
-        guild = bot.get_guild(GUILD_ID)
-        if not guild:
-            print("Guildが見つかりません")
-            return
-        online = [m for m in guild.members if not m.bot and m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)]
-        print(f"オンライン人数: {len(online)}")
-        if len(online) >= 5:
-            channel = guild.get_channel(CHANNEL_ID)
-            if not channel:
-                print(f"チャンネルが見つかりません: {CHANNEL_ID}")
-                return
-            msg = await channel.send("条件を達成。ちょっと質問してもいい？", view=QuestionView())
-            print("モーダル投稿用のボタンを送信しました。")
-            await asyncio.sleep(180)
-            try:
-                await msg.delete()
-                print("3分後にメッセージを削除しました。")
-            except Exception as e:
-                print(f"[削除失敗] {e}")
-    except Exception as e:
-        print(f"[check_online_membersエラー] {e}")
-
-@bot.event
-async def on_ready():
-    print(f"✅ Bot ready: {bot.user}")
-    await tree.sync()
-    check_online_members.start()
-
 next_response_time = 0
 
 @bot.event
 async def on_message(message):
-    global next_response_time
+    global next_response_time, is_modal_active
 
     if message.author.bot:
         return
 
-    # メンション応答
+    # モーダル起動ワードに反応（例：なでこに聞く）
+    if message.content.lower().startswith("なでこに聞く"):
+        if is_modal_active:
+            await message.channel.send(f"{message.author.mention} 今は受け付けていないよ・・・")
+            return
+
+        try:
+            is_modal_active = True
+            modal = FeedbackModal(message.author)
+            await message.channel.send(f"{message.author.mention} モーダルを開くね・・・")
+            await message.channel.send_modal(modal)
+        except Exception as e:
+            is_modal_active = False
+            print(f"[モーダルエラー] {e}")
+        return
+
+    # モーダルが開いている間は他の処理をスキップ
+    if is_modal_active:
+        if bot.user in message.mentions:
+            await message.channel.send(f"{message.author.mention} 今は受け付けていないよ・・・")
+        return
+
+    # 通常のメンション会話処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
             return
+
         thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
+
         async def try_gemini():
             return await gemini_search_reply(query)
+
         try:
             reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-        except:
+        except (asyncio.TimeoutError, Exception):
             reply_text = await openrouter_reply(query)
+
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 自然参加メッセージ
+    # 3%の確率で返答。ただし1時間ロックあり
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
         return
+
     if random.random() < 0.03:
         try:
             history = []
@@ -173,10 +194,14 @@ async def on_message(message):
                     break
             history.reverse()
             history_text = "\n".join(history)
-            prompt = f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\nこれらを読んで自然に会話に入ってみてください。\n\n{history_text}"
+            prompt = (
+                f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
+                f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
+            )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-            next_response_time = now + 3600
+
+            next_response_time = now + 60 * 60  # 1時間ロック
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
