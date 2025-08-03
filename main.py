@@ -1,4 +1,4 @@
-import os
+import os 
 import discord
 import asyncio
 import random
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
-from discord.ui import Modal, View, Button, TextInput
+from discord.ui import Modal, TextInput
 
 load_dotenv()
 
@@ -48,14 +48,15 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください。"
 )
 
-modal_active = False  # モーダルが開いているかどうか
-
 class QuizModal(Modal, title="なでこからの問題だよ…"):
-    answer_input = TextInput(label="答えてみて…制限時間は3分間だよ", placeholder="デカルトの「我思う、ゆえに我あり」という言葉は何を意味する？")
+    answer_input = TextInput(
+        label="答えてみて…制限時間は3分間だよ", 
+        placeholder="デカルトの「我思う、ゆえに我あり」という言葉は何を意味する？"
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         answer = self.answer_input.value.strip()
-        correct_answer = "思考することが存在の証明であること"  # 任意の答えに変更
+        correct_answer = "思考することが存在の証明であること"
         if answer == correct_answer:
             await interaction.response.send_message("正解…さすがだね…", ephemeral=True)
         else:
@@ -73,15 +74,10 @@ async def quiz_check():
 
     online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
     if len(online_members) >= 5:
-        for member in online_members:
-            try:
-                await member.send("ちょっとしたクイズに答えてくれるかな…？")
-                modal = QuizModal()
-                await member.send_modal(modal)
-                await asyncio.sleep(180)  # 3分待つ
-            except Exception as e:
-                print(f"[モーダル送信エラー] {e}")
-
+        try:
+            await channel.send("ねぇ…ちょっとクイズに付き合ってくれるかな…？\n答えたければ「なでこに聞く」と話しかけてね…")
+        except Exception as e:
+            print(f"[クイズ投稿エラー] {e}")
 
 def serpapi_search(query):
     url = "https://serpapi.com/search"
@@ -153,8 +149,9 @@ async def on_message(message):
             await message.channel.send(f"{message.author.mention} モーダルを開くね・・・")
             await message.channel.send_modal(modal)
         except Exception as e:
-            is_modal_active = False
             print(f"[モーダルエラー] {e}")
+        finally:
+            is_modal_active = False
         return
 
     if is_modal_active:
@@ -201,9 +198,9 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-
             next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
