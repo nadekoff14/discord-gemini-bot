@@ -71,7 +71,7 @@ async def quiz_check():
         return
 
     online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
-    if len(online_members) >= 7 and not quiz_active:
+    if len(online_members) >= 6 and not quiz_active:
         quiz_active = True
         try:
             # 問題文を通常メッセージで送信
@@ -205,4 +205,5 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
 
