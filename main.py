@@ -121,12 +121,12 @@ async def check_online_members():
             return
         online = [m for m in guild.members if not m.bot and m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)]
         print(f"オンライン人数: {len(online)}")
-        if len(online) >= 6 and not is_modal_active:
+        if len(online) >= 5 and not is_modal_active:
             channel = guild.get_channel(CHANNEL_ID)
             if not channel:
                 print(f"チャンネルが見つかりません: {CHANNEL_ID}")
                 return
-            msg = await channel.send("みんな集まってるね・・・ちょっと質問してもいい？", view=QuestionView())
+            msg = await channel.send("条件を達成。ちょっと質問してもいい？", view=QuestionView())
             print("モーダル投稿用のボタンを送信しました。")
             await asyncio.sleep(180)  # 3分後
             try:
