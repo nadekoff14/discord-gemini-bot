@@ -65,11 +65,11 @@ class QuizModal(Modal, title="なでこからの問題だよ…"):
 class QuizButtonView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(Button(label="なでこに答える", style=discord.ButtonStyle.primary, custom_id="open_quiz_modal"))
 
     @discord.ui.button(label="なでこに答える", style=discord.ButtonStyle.primary, custom_id="open_quiz_modal")
     async def open_modal_button(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(QuizModal())
+
 
 @tasks.loop(minutes=6)
 async def quiz_check():
@@ -193,6 +193,8 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
+
 
 
 
