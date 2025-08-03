@@ -1,4 +1,4 @@
-import os
+import os 
 import discord
 import asyncio
 import random
@@ -96,14 +96,23 @@ class QuestionView(View):
 
 @tasks.loop(minutes=3)
 async def check_online_members():
-    guild = bot.get_guild(GUILD_ID)
-    if not guild:
-        return
-    online = [m for m in guild.members if not m.bot and m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)]
-    if len(online) >= 4:
-        channel = guild.get_channel(CHANNEL_ID)
-        if channel:
+    try:
+        print("オンラインチェック開始")
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("Guildが見つかりません")
+            return
+        online = [m for m in guild.members if not m.bot and m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)]
+        print(f"オンライン人数: {len(online)}")
+        if len(online) >= 4:
+            channel = guild.get_channel(CHANNEL_ID)
+            if not channel:
+                print(f"チャンネルが見つかりません: {CHANNEL_ID}")
+                return
             await channel.send("みんな集まってるね・・・ちょっと質問してもいい？", view=QuestionView())
+            print("モーダル投稿用のボタンを送信しました。")
+    except Exception as e:
+        print(f"[check_online_membersエラー] {e}")
 
 @bot.event
 async def on_ready():
@@ -153,8 +162,6 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
 
 
 
