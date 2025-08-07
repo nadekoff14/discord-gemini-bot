@@ -1,11 +1,9 @@
-import os 
+import os
 import discord
 import asyncio
 import random
 import requests
-import google.generativeai as genai
 from dotenv import load_dotenv
-from openai import OpenAI
 from discord import app_commands
 from discord.ext import tasks
 from discord.ui import Modal, View, Button, TextInput
@@ -13,9 +11,8 @@ from discord.ui import Modal, View, Button, TextInput
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")  # Hugging Faceトークン
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
 
@@ -26,18 +23,13 @@ intents.presences = True
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
-# Gemini 設定
-genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel("gemini-pro")
-chat = gemini_model.start_chat(history=[])
+# Hugging Face設定
+HF_MODEL_ID = "rinna/japanese-gpt-neox-3.6b"
+HF_HEADERS = {
+    "Authorization": f"Bearer {HF_API_TOKEN}",
+    "Content-Type": "application/json"
+}
 
-# OpenRouter 設定
-openrouter_client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY
-)
-
-# system_instruction の定義
 system_instruction = (
     "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント。"
     "専門用語はできるだけ使わず、優しい言葉で説明してください。"
@@ -71,26 +63,37 @@ def serpapi_search(query):
         print(f"[SerpAPIエラー] {e}")
         return "検索サービスに接続できなかったかな…"
 
-async def gemini_search_reply(query):
+async def huggingface_reply(query):
     search_result = serpapi_search(query)
-    full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
-    response = await asyncio.to_thread(chat.send_message, full_query)
-    return response.text
+    prompt = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
 
-async def openrouter_reply(query):
+    url = f"https://api-inference.huggingface.co/models/{HF_MODEL_ID}"
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": 150,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+    }
     try:
-        completion = await asyncio.to_thread(
-            openrouter_client.chat.completions.create,
-            model="rinna/japanese-gpt-neox-3.6b-instruction-ppo",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query}
-            ]
+        response = await asyncio.to_thread(
+            requests.post,
+            url,
+            headers=HF_HEADERS,
+            json=payload,
+            timeout=30
         )
-        return completion.choices[0].message.content.strip()
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict) and "error" in data:
+            print(f"[HuggingFace API エラー] {data['error']}")
+            return "ごめんね、うまく答えられなかったかな…"
+        # 生成テキストはdata[0]["generated_text"]に入っている想定
+        return data[0]["generated_text"]
     except Exception as e:
-        print(f"[OpenRouterエラー] {e}")
-        return "ごめんね、ちょっと考えがまとまらなかったかも"
+        print(f"[HuggingFace通信エラー] {e}")
+        return "ごめんね、処理中に問題が起きたかな…"
 
 # グローバル変数を定義（1時間ロック用）
 next_response_time = 0  # Unix時間（初期値）
@@ -101,7 +104,6 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # メンションされたときの応答
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -112,15 +114,12 @@ async def on_message(message):
 
         reply_text = None
         try:
-            # Gemini優先、10秒以内で返答なければOpenRouterに切り替え
-            reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
+            reply_text = await asyncio.wait_for(huggingface_reply(query), timeout=30.0)
         except asyncio.TimeoutError:
-            print("[Geminiタイムアウト] OpenRouterに切り替え")
+            reply_text = "ごめんね、応答が遅れてしまったかな…"
         except Exception as e:
-            print(f"[Geminiエラー] {e}")
-
-        if reply_text is None:
-            reply_text = await openrouter_reply(query)
+            print(f"[応答エラー] {e}")
+            reply_text = "ごめんね、ちょっと考えがまとまらなかったかも"
 
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
@@ -144,7 +143,7 @@ async def on_message(message):
                 f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
                 f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
             )
-            response = await openrouter_reply(prompt)
+            response = await huggingface_reply(prompt)
 
             await message.channel.send(response)
             next_response_time = now + 60 * 60
@@ -152,3 +151,7 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
+
+
+
