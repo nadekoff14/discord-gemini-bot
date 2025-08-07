@@ -81,7 +81,7 @@ async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
-            model="rinna/japanese-gpt-neox-3.6b",
+            model="rinna/japanese-gpt-neox-3.6b-instruction-ppo",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": query}
@@ -126,7 +126,7 @@ async def on_message(message):
         return
 
     # 3%の確率で自然参加（1時間ロック）
-    now = asyncio.get_event_loop().time()
+    now = asyncio.get_running_loop().time()
     if now < next_response_time:
         return
 
@@ -152,4 +152,3 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
