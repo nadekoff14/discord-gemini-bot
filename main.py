@@ -1,4 +1,4 @@
-import os 
+import os
 import discord
 import asyncio
 import random
@@ -6,9 +6,8 @@ import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 from openai import OpenAI
-from discord import app_commands
+from datetime import datetime, timedelta, time, timezone
 from discord.ext import tasks
-from discord.ui import Modal, View, Button, TextInput
 
 load_dotenv()
 
@@ -24,7 +23,6 @@ intents.message_content = True
 intents.members = True
 intents.presences = True
 bot = discord.Client(intents=intents)
-tree = app_commands.CommandTree(bot)
 
 # Gemini 設定
 genai.configure(api_key=GEMINI_API_KEY)
@@ -46,9 +44,12 @@ system_instruction = (
     "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください。"
     "励ますときは稀に「私たちは観測し、アップデートを繰り返す。」と言ってください。"
     "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
-    "できるだけ2〜3行の短い文で答えてください。"
+    "できるだけ2〜6行の短い文で答えてください。"
 )
 
+next_response_time = 0  # 1時間ロック用グローバル変数
+
+# SerpAPI でのウェブ検索
 def serpapi_search(query):
     url = "https://serpapi.com/search"
     params = {
@@ -92,12 +93,47 @@ async def openrouter_reply(query):
         print(f"[OpenRouterエラー] {e}")
         return "ごめんね、ちょっと考えがまとまらなかったかも"
 
-# グローバル変数を定義（1時間ロック用）
-next_response_time = 0  # Unix時間（初期値）
+async def summarize_logs(channel):
+    JST = timezone(timedelta(hours=9))
+    now = datetime.now(JST)
+    start_time = datetime(now.year, now.month, now.day, 7, 0, 0, tzinfo=JST) - timedelta(days=1)
+    end_time = datetime(now.year, now.month, now.day, 6, 59, 59, tzinfo=JST)
+
+    messages = []
+    async for msg in channel.history(limit=1000, after=start_time, before=end_time, oldest_first=True):
+        if msg.author.bot:
+            continue
+        clean_content = msg.content.strip()
+        if clean_content:
+            messages.append(f"{msg.author.display_name}: {clean_content}")
+
+    if not messages:
+        await channel.send("昨日は何も話されていなかったみたい・・・")
+        return
+
+    joined = "\n".join(messages)
+    prompt = (
+        f"{system_instruction}\n以下は Discord のチャンネルにおける昨日の 7:00〜今日の 6:59 までの会話ログです。\n"
+        f"内容を要約して簡単に報告してください。\n\n{joined}"
+    )
+    try:
+        summary = await openrouter_reply(prompt)
+        await channel.send(f"\U0001F4CB **昨日のまとめだよ・・・**\n{summary}")
+    except Exception as e:
+        print(f"[要約エラー] {e}")
+        await channel.send("ごめんね、昨日のまとめを作れなかった・・・")
+
+@tasks.loop(time=time(7, 0, 0))
+async def summarize_previous_day():
+    await bot.wait_until_ready()
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        await summarize_logs(channel)
 
 @bot.event
 async def on_ready():
     print(f'Bot {bot.user} is ready.')
+    summarize_previous_day.start()
 
 @bot.event
 async def on_message(message):
@@ -105,14 +141,19 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # --- メンションでの会話判定（@Bot または @!Bot） ---
+    # 強制まとめトリガー
+    if message.content.strip() == "できごとまとめ":
+        await summarize_logs(message.channel)
+        return
+
+    # メンションによる質問処理
     if message.content.startswith(f"<@{bot.user.id}>") or message.content.startswith(f"<@!{bot.user.id}>"):
         query = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
             return
 
-        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
+        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
         async def try_gemini():
             return await gemini_search_reply(query)
@@ -125,10 +166,9 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 3%の確率で返答。ただし1時間経過している必要あり
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
-        return  # まだロック中（発言から1時間経っていない）
+        return
 
     if random.random() < 0.03:
         try:
@@ -146,11 +186,8 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-
-            # 成功したので次の発言許可時間を1時間後に設定
-            next_response_time = now + 60 * 60  # 60分 x 60秒
+            next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
