@@ -24,7 +24,7 @@ bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
 # Hugging Face設定
-HF_MODEL_ID = "rinna/japanese-gpt-neox-3.6b"
+HF_MODEL_ID = "rinna/japanese-gpt-neox-3.6b-instruction-sft"
 HF_HEADERS = {
     "Authorization": f"Bearer {HF_API_TOKEN}",
     "Content-Type": "application/json"
