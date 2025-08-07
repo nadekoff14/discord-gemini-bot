@@ -44,7 +44,7 @@ system_instruction = (
     "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください。"
     "日本人が日常的に話すような自然でミステリアスな口調で話してください。"
     "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください。"
-    "励ますときは稀に「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください。"
+    "励ますときは稀に「私たちは観測し、アップデートを繰り返す。」と言ってください。"
     "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
     "できるだけ2〜3行の短い文で答えてください。"
 )
@@ -81,7 +81,7 @@ async def openrouter_reply(query):
     try:
         completion = await asyncio.to_thread(
             openrouter_client.chat.completions.create,
-            model="tngtech/deepseek-r1t2-chimera:free",
+            model="rinna/japanese-gpt-neox-3.6b",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": query}
@@ -101,7 +101,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # メンション会話処理
+    # メンションされたときの応答
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -110,15 +110,18 @@ async def on_message(message):
 
         thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
 
-        async def try_gemini():
-            return await gemini_search_reply(query)
-
+        reply_text = None
         try:
-            reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-        except (asyncio.TimeoutError, Exception):
+            # Gemini優先、10秒以内で返答なければOpenRouterに切り替え
+            reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
+        except asyncio.TimeoutError:
+            print("[Geminiタイムアウト] OpenRouterに切り替え")
+        except Exception as e:
+            print(f"[Geminiエラー] {e}")
+
+        if reply_text is None:
             reply_text = await openrouter_reply(query)
 
-        # 通常の日本語返答のみを送信（ログ形式なし）
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
@@ -143,20 +146,10 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
 
-            # 応答のみ送信（ログ形式ではない）
             await message.channel.send(response)
-
             next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
-
-
-
-
-
-
 
