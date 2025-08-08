@@ -123,7 +123,9 @@ async def summarize_logs(channel):
         print(f"[要約エラー] {e}")
         await channel.send("ごめんね、昨日のまとめを作れなかった・・・")
 
-@tasks.loop(time=time(7, 0, 0))
+JST = timezone(timedelta(hours=9))
+
+@tasks.loop(time=time(7, 0, 0, tzinfo=JST))
 async def summarize_previous_day():
     await bot.wait_until_ready()
     channel = bot.get_channel(CHANNEL_ID)
@@ -191,4 +193,5 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
 
