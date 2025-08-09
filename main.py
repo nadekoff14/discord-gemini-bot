@@ -348,6 +348,12 @@ async def on_message(message):
     content = message.content or ""
     content_stripped = content.strip()
 
+
+
+print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
+
+
+
     # 強制開始トリガー ("Open Lain" — case-insensitive, exact phrase anywhere)
     if content_stripped.lower() == "open lain":
         if not event_active:
@@ -575,14 +581,10 @@ async def summarize_logs(channel):
 
 
 
-import datetime
-
-now = datetime.datetime.now()
-
-print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
-
 
 # ---------------------
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
+
