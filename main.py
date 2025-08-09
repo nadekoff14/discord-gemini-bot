@@ -80,42 +80,60 @@ MONITOR_CODE = "XHAJRVETKOU"
 # ---------------------
 # 既存機能ラッパー（Web検索・OpenRouter等）を残すが、イベント中は無効にする
 # ---------------------
-@bot.event
-async def on_message(message):
-    global next_response_time, event_active, chat, openrouter_client
+def serpapi_search(query):
+    if not SERPAPI_KEY:
+        return "検索サービスが設定されていないよ・・・"
+    url = "https://serpapi.com/search"
+    params = {
+        "q": query,
+        "hl": "ja",
+        "gl": "jp",
+        "api_key": SERPAPI_KEY
+    }
+    try:
+        res = requests.get(url, params=params, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        if "answer_box" in data and "answer" in data["answer_box"]:
+            return data["answer_box"]["answer"]
+        elif "organic_results" in data and data["organic_results"]:
+            return data["organic_results"][0].get("snippet", "検索結果が見つからなかったかな…")
+        else:
+            return "検索結果が見つからなかったかな…"
+    except Exception as e:
+        print(f"[SerpAPIエラー] {e}")
+        return "検索サービスに接続できなかったかな…"
 
-    if message.author.bot:
-        return
+async def gemini_search_reply(query):
+    # イベント中は無効化
+    if event_active:
+        return "今はちょっと静かにするね・・・"
+    if not chat:
+        return "Gemini が利用できないよ・・・"
+    search_result = serpapi_search(query)
+    full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
+    response = await asyncio.to_thread(chat.send_message, full_query)
+    return response.text
 
-    content = message.content or ""
-    content_stripped = content.strip()
-
-    # 省略：イベント中処理や他の処理...
-
-    # 通常時のメンション応答
-    if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
-        query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-        if not query:
-            await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-            return
-
-        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
-
-        try:
-            # Geminiで10秒以内に返答がなければOpenRouterへフォールバック
-            if chat is not None:
-                reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
-            else:
-                reply_text = await openrouter_reply(query)
-        except (asyncio.TimeoutError, Exception):
-            # どちらか失敗したらOpenRouterで返す
-            reply_text = await openrouter_reply(query)
-
-        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
-        return
-
-    # 他のメッセージ処理
-
+async def openrouter_reply(query):
+    # イベント中は無効化
+    if event_active:
+        return "今はちょっと静かにするね・・・"
+    if not openrouter_client:
+        return "OpenRouter が利用できないよ・・・"
+    try:
+        completion = await asyncio.to_thread(
+            openrouter_client.chat.completions.create,
+            model="tngtech/deepseek-r1t2-chimera:free",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": query}
+            ]
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[OpenRouterエラー] {e}")
+        return "ごめんね、ちょっと考えがまとまらなかったかも"
 
 # ---------------------
 # ヴィジュネル暗号の暗号化/復号ユーティリティ（必要なら）
@@ -159,18 +177,15 @@ def vigenere_decrypt(ciphertext, key):
 # ---------------------
 # ヘルパー：オンライン人数カウント
 # ---------------------
-def count_online_members(guild: discord.Guild):
+async def count_online_members(guild: discord.Guild):
+    # メンバーリストを確実にロード
+    await guild.chunk()
     count = 0
     for m in guild.members:
-        # Botは除外、かつ presence がオンライン/idle/dnd（offlineは除外）
-        try:
-            if m.bot:
-                continue
-            if m.status != discord.Status.offline:
-                count += 1
-        except Exception:
-            # 一部のメンバーは presence が取れないことがある
+        if m.bot:
             continue
+        if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd):
+            count += 1
     return count
 
 # ---------------------
@@ -182,16 +197,17 @@ async def hourly_online_check():
     await bot.wait_until_ready()
     now = asyncio.get_event_loop().time()
     if now < count_cooldown_until:
-        # カウントは休止中
         return
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         return
-    online = count_online_members(guild)
+
+    online = await count_online_members(guild)  # ← 修正版を使用
+    print(f"[DEBUG] Online members: {online}")  # デバッグ出力
+
     channel = bot.get_channel(event_channel_id)
     if online >= ONLINE_THRESHOLD and not event_active and channel:
-        # イベントを開始
-        asyncio.create_task(start_event(channel, reason="auto"))
+        await start_event(channel, reason="auto")
 
 # ---------------------
 # イベントオーケストレーション
@@ -560,7 +576,6 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
 
 
 
