@@ -80,60 +80,45 @@ MONITOR_CODE = "XHAJRVETKOU"
 # ---------------------
 # 既存機能ラッパー（Web検索・OpenRouter等）を残すが、イベント中は無効にする
 # ---------------------
-def serpapi_search(query):
-    if not SERPAPI_KEY:
-        return "検索サービスが設定されていないよ・・・"
-    url = "https://serpapi.com/search"
-    params = {
-        "q": query,
-        "hl": "ja",
-        "gl": "jp",
-        "api_key": SERPAPI_KEY
-    }
-    try:
-        res = requests.get(url, params=params, timeout=5)
-        res.raise_for_status()
-        data = res.json()
-        if "answer_box" in data and "answer" in data["answer_box"]:
-            return data["answer_box"]["answer"]
-        elif "organic_results" in data and data["organic_results"]:
-            return data["organic_results"][0].get("snippet", "検索結果が見つからなかったかな…")
-        else:
-            return "検索結果が見つからなかったかな…"
-    except Exception as e:
-        print(f"[SerpAPIエラー] {e}")
-        return "検索サービスに接続できなかったかな…"
+    # メンションによる質問処理（通常モード）
+    if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
+        query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        if not query:
+            await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+            return
 
-async def gemini_search_reply(query):
-    # イベント中は無効化
-    if event_active:
-        return "今はちょっと静かにするね・・・"
-    if not chat:
-        return "Gemini が利用できないよ・・・"
-    search_result = serpapi_search(query)
-    full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
-    response = await asyncio.to_thread(chat.send_message, full_query)
-    return response.text
+        thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
-async def openrouter_reply(query):
-    # イベント中は無効化
-    if event_active:
-        return "今はちょっと静かにするね・・・"
-    if not openrouter_client:
-        return "OpenRouter が利用できないよ・・・"
-    try:
-        completion = await asyncio.to_thread(
-            openrouter_client.chat.completions.create,
-            model="tngtech/deepseek-r1t2-chimera:free",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query}
-            ]
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[OpenRouterエラー] {e}")
-        return "ごめんね、ちょっと考えがまとまらなかったかも"
+        reply_text = None
+
+        # まず Gemini を試す（設定されている場合のみ）
+        try:
+            if chat:
+                # Gemini 呼び出し（タイムアウトつき）
+                reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
+                # Gemini が未設定やプレースホルダ応答を返す場合は例外扱いしてフォールバックへ
+                if reply_text and "Gemini が利用できない" in reply_text:
+                    raise RuntimeError("gemini_unavailable")
+            else:
+                # chat が None -> すぐにフォールバック
+                raise RuntimeError("no_gemini")
+        except (asyncio.TimeoutError, Exception):
+            # Gemini 失敗時は OpenRouter を試す
+            try:
+                reply_text = await asyncio.wait_for(openrouter_reply(query), timeout=10.0)
+                # OpenRouter が未設定やプレースホルダを返すなら最終フォールバックへ
+                if reply_text and "OpenRouter が利用できない" in reply_text:
+                    reply_text = None
+            except Exception:
+                reply_text = None
+
+        # 最終フォールバック（どちらも利用できなかった場合）
+        if not reply_text:
+            reply_text = "ごめんね、ちょっと考えがまとまらなかったかも"
+
+        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
+        return
+
 
 # ---------------------
 # ヴィジュネル暗号の暗号化/復号ユーティリティ（必要なら）
