@@ -227,35 +227,35 @@ async def on_message(message):
 
         return  # イベント中は他の処理しない
 
-    # 通常処理ここから
+# 通常処理ここから
 
-    # 強制まとめトリガー
-    if content_stripped == "できごとまとめ":
-        await summarize_logs(channel)
-        return
+# 強制まとめトリガー
+if content_stripped == "できごとまとめ":
+    await summarize_logs(channel)
+    return
 
-    # メンションによる質問処理（通常モード）
-    if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
-        query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-if not query:
-    await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-    return  # ここはawaitと同じインデント（1段）に合わせる
+# メンションによる質問処理（通常モード）
+if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
+    query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    if not query:
+        await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+        return  # ここはawaitと同じインデント（1段）に合わせる
 
-        thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
+    thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
-        async def try_gemini():
-            return await gemini_search_reply(query)
+    async def try_gemini():
+        return await gemini_search_reply(query)
 
-        try:
-            reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-        except (asyncio.TimeoutError, Exception):
-            reply_text = await openrouter_reply(query)
+    try:
+        reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
+    except (asyncio.TimeoutError, Exception):
+        reply_text = await openrouter_reply(query)
 
-        if not reply_text:
-            reply_text = "ごめんね、ちょっと考えがまとまらなかったかも"
+    if not reply_text:
+        reply_text = "ごめんね、ちょっと考えがまとまらなかったかも"
 
-        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
-        return
+    await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
+    return
 
     # 自動会話ランダム参加（1時間ロック制御）
     now = asyncio.get_event_loop().time()
@@ -329,3 +329,4 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
