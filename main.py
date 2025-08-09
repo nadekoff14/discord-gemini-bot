@@ -92,7 +92,7 @@ async def on_message(message):
 
     # 省略：イベント中処理や他の処理...
 
-    # メンションによる質問処理（通常モード）
+    # 通常時のメンション応答
     if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
         query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
         if not query:
@@ -101,60 +101,18 @@ async def on_message(message):
 
         thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
-    try:
-        if chat is not None:
-            # Gemini API利用
-            reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
-        elif openrouter_client is not None:
-            # Gemini使えなければOpenRouter利用
-            reply_text = await openrouter_reply(query)
-        else:
-            # どちらも使えない場合のフォールバックメッセージ
-            reply_text = "ごめんね、今はAIが利用できないみたい・・・"
-    except (asyncio.TimeoutError, Exception):
-        # Geminiで失敗したらOpenRouterに切り替え（OpenRouterがある場合）
-        if openrouter_client is not None:
-            try:
+        try:
+            # Geminiで10秒以内に返答がなければOpenRouterへフォールバック
+            if chat is not None:
+                reply_text = await asyncio.wait_for(gemini_search_reply(query), timeout=10.0)
+            else:
                 reply_text = await openrouter_reply(query)
-            except Exception:
-                reply_text = "ごめんね、AIがうまく動かなかったみたい・・・"
-        else:
-            reply_text = "ごめんね、AIがうまく動かなかったみたい・・・"
+        except (asyncio.TimeoutError, Exception):
+            # どちらか失敗したらOpenRouterで返す
+            reply_text = await openrouter_reply(query)
 
-    await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
-    return
-
-# Geminiに問い合わせる関数
-async def gemini_search_reply(query):
-    global chat
-    if chat is None:
-        raise RuntimeError("Gemini client not initialized")
-
-    chat.send_message(query)
-    response = None
-    async for part in chat:
-        response = part.text
-        break
-    return response or "返答がありません・・・"
-
-
-# OpenRouterに問い合わせる関数も同様に置く
-
-async def openrouter_reply(query):
-    # ここにOpenRouter問い合わせ処理を書く（例）
-    pass
-
-
-
-
-
-
-
-
-
-
-
-
+        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
+        return
 
     # 他のメッセージ処理
 
@@ -602,3 +560,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
+
+
+
