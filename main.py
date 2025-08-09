@@ -257,30 +257,30 @@ if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.
     await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
     return
 
-    # 自動会話ランダム参加（1時間ロック制御）
-    now = asyncio.get_event_loop().time()
-    if now < next_response_time:
-        return
+# 自動会話ランダム参加（1時間ロック制御）
+now = asyncio.get_event_loop().time()
+if now < next_response_time:
+    return
 
-    if random.random() < 0.03:
-        try:
-            history = []
-            async for msg in channel.history(limit=20, oldest_first=False):
-                if not msg.author.bot and msg.content.strip():
-                    history.append(f"{msg.author.display_name}: {msg.content.strip()}")
-                if len(history) >= 10:
-                    break
-            history.reverse()
-            history_text = "\n".join(history)
-            prompt = (
-                f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
-                f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
-            )
-            response = await openrouter_reply(prompt)
-            await channel.send(response)
-            next_response_time = now + 60 * 60
-        except Exception as e:
-            print(f"[履歴会話エラー] {e}")
+if random.random() < 0.03:
+    try:
+        history = []
+        async for msg in channel.history(limit=20, oldest_first=False):
+            if not msg.author.bot and msg.content.strip():
+                history.append(f"{msg.author.display_name}: {msg.content.strip()}")
+            if len(history) >= 10:
+                break
+        history.reverse()
+        history_text = "\n".join(history)
+        prompt = (
+            f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
+            f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
+        )
+        response = await openrouter_reply(prompt)
+        await channel.send(response)
+        next_response_time = now + 60 * 60
+    except Exception as e:
+        print(f"[履歴会話エラー] {e}")
 
 # ---------------------
 # 既存の summarize_previous_day は event_active をチェックするように改修
@@ -329,4 +329,3 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
