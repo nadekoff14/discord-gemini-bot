@@ -92,14 +92,14 @@ async def on_message(message):
 
     # 省略：イベント中処理や他の処理...
 
-# メンションによる質問処理（通常モード）
-if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
-    query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-    if not query:
-        await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-        return
+    # メンションによる質問処理（通常モード）
+    if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
+        query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        if not query:
+            await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+            return
 
-    thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
+        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
     try:
         if chat is not None:
@@ -602,4 +602,3 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
