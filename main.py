@@ -223,7 +223,7 @@ async def on_message(message):
                     if not matched_any:
                         rep = await channel.send("・・・。")
                         event_messages.append(rep)
-                 return
+                    return  # このようにインデントを揃える
 
         return  # イベント中は他の処理しない
 
@@ -239,7 +239,7 @@ async def on_message(message):
         query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
         if not query:
             await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-            return
+                   return
 
         thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
@@ -281,6 +281,7 @@ async def on_message(message):
             next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
+
 # ---------------------
 # 既存の summarize_previous_day は event_active をチェックするように改修
 # ---------------------
@@ -328,6 +329,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
