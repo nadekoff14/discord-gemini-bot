@@ -348,11 +348,7 @@ async def on_message(message):
     content = message.content or ""
     content_stripped = content.strip()
 
-
-
-print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
-
-
+    print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
 
     # 強制開始トリガー ("Open Lain" — case-insensitive, exact phrase anywhere)
     if content_stripped.lower() == "open lain":
@@ -362,7 +358,6 @@ print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_unti
         else:
             await channel.send("もう謎解きは始まっているよ・・・")
         return
-
     # If event is active, only handle event-specific interactions and ignore all other features
     if event_active:
         # record participant messages if they mention the bot or are relevant to puzzle flow
@@ -586,5 +581,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
+
 
 
