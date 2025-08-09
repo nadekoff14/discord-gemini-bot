@@ -237,9 +237,9 @@ async def on_message(message):
     # メンションによる質問処理（通常モード）
     if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
         query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-        if not query:
-            await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-                   return
+if not query:
+    await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+    return  # ここはawaitと同じインデント（1段）に合わせる
 
         thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
@@ -329,14 +329,3 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
-
-
-
-
-
-
-
-
-
-
