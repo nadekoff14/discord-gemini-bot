@@ -174,11 +174,9 @@ def vigenere_decrypt(ciphertext, key):
             result.append(ch)
     return "".join(result)
 
-# ---------------------
-# ヘルパー：オンライン人数カウント
-# ---------------------
+
+# 非同期でオンライン人数カウント
 async def count_online_members(guild: discord.Guild):
-    # メンバーリストを確実にロード
     await guild.chunk()
     count = 0
     for m in guild.members:
@@ -188,26 +186,34 @@ async def count_online_members(guild: discord.Guild):
             count += 1
     return count
 
-# ---------------------
-# 60分ループでオンライン人数をチェックしてイベントを開始
-# ---------------------
 @tasks.loop(minutes=60)
 async def hourly_online_check():
     global count_cooldown_until, event_active
     await bot.wait_until_ready()
     now = asyncio.get_event_loop().time()
     if now < count_cooldown_until:
+        print(f"[DEBUG] クールダウン中: count_cooldown_until={count_cooldown_until}, now={now}")
         return
+
     guild = bot.get_guild(GUILD_ID)
     if not guild:
+        print("[DEBUG] ギルドが取得できていません。")
         return
 
-    online = await count_online_members(guild)  # ← 修正版を使用
-    print(f"[DEBUG] Online members: {online}")  # デバッグ出力
+    online = await count_online_members(guild)
+    print(f"[DEBUG] Online members: {online}")
 
     channel = bot.get_channel(event_channel_id)
+    print(f"[DEBUG] event_active={event_active}, channel={channel}")
+
     if online >= ONLINE_THRESHOLD and not event_active and channel:
+        print("[DEBUG] イベント開始条件を満たしました。start_eventを呼びます。")
         await start_event(channel, reason="auto")
+    else:
+        print("[DEBUG] イベント開始条件を満たしていません。")
+
+
+
 
 # ---------------------
 # イベントオーケストレーション
@@ -348,6 +354,8 @@ async def on_message(message):
     content = message.content or ""
     content_stripped = content.strip()
 
+    now = asyncio.get_event_loop().time()  # ←ここを追加、printで使うため
+
     print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
 
     # 強制開始トリガー ("Open Lain" — case-insensitive, exact phrase anywhere)
@@ -357,7 +365,10 @@ async def on_message(message):
             await start_event(channel, reason="manual")
         else:
             await channel.send("もう謎解きは始まっているよ・・・")
+        return channel.send("もう謎解きは始まっているよ・・・")
         return
+
+
     # If event is active, only handle event-specific interactions and ignore all other features
     if event_active:
         # record participant messages if they mention the bot or are relevant to puzzle flow
@@ -485,7 +496,6 @@ async def on_message(message):
         await summarize_logs(channel)
         return
 
-    # メンションによる質問処理（通常モード）
     if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
         query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
         if not query:
@@ -505,8 +515,7 @@ async def on_message(message):
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 自動会話（ランダムで入る）--- これも event_active で止めたいので上に分岐済み
-    now = asyncio.get_event_loop().time()
+    # 自動会話（ランダム応答）
     if now < next_response_time:
         return
 
@@ -581,7 +590,3 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
-
-
-
