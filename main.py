@@ -227,60 +227,61 @@ async def on_message(message):
 
         return  # イベント中は他の処理しない
 
-# 通常処理ここから
 
-# 強制まとめトリガー
-if content_stripped == "できごとまとめ":
-    await summarize_logs(channel)
-    return
+    # 通常処理ここから
 
-# メンションによる質問処理（通常モード）
-if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
-    query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-    if not query:
-        await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-        return  # ここはawaitと同じインデント（1段）に合わせる
+    # 強制まとめトリガー
+    if content_stripped == "できごとまとめ":
+        await summarize_logs(channel)
+        return
 
-    thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
+    # メンションによる質問処理（通常モード）
+    if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
+        query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        if not query:
+            await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+            return
 
-    async def try_gemini():
-        return await gemini_search_reply(query)
+        thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
-    try:
-        reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-    except (asyncio.TimeoutError, Exception):
-        reply_text = await openrouter_reply(query)
+        async def try_gemini():
+            return await gemini_search_reply(query)
 
-    if not reply_text:
-        reply_text = "ごめんね、ちょっと考えがまとまらなかったかも"
+        try:
+            reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
+        except (asyncio.TimeoutError, Exception):
+            reply_text = await openrouter_reply(query)
 
-    await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
-    return
+        if not reply_text:
+            reply_text = "ごめんね、ちょっと考えがまとまらなかったかも"
 
-# 自動会話ランダム参加（1時間ロック制御）
-now = asyncio.get_event_loop().time()
-if now < next_response_time:
-    return
+        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
+        return
 
-if random.random() < 0.03:
-    try:
-        history = []
-        async for msg in channel.history(limit=20, oldest_first=False):
-            if not msg.author.bot and msg.content.strip():
-                history.append(f"{msg.author.display_name}: {msg.content.strip()}")
-            if len(history) >= 10:
-                break
-        history.reverse()
-        history_text = "\n".join(history)
-        prompt = (
-            f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
-            f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
-        )
-        response = await openrouter_reply(prompt)
-        await channel.send(response)
-        next_response_time = now + 60 * 60
-    except Exception as e:
-        print(f"[履歴会話エラー] {e}")
+    # 自動会話ランダム参加（1時間ロック制御）
+    now = asyncio.get_event_loop().time()
+    if now < next_response_time:
+        return
+
+    if random.random() < 0.03:
+        try:
+            history = []
+            async for msg in channel.history(limit=20, oldest_first=False):
+                if not msg.author.bot and msg.content.strip():
+                    history.append(f"{msg.author.display_name}: {msg.content.strip()}")
+                if len(history) >= 10:
+                    break
+            history.reverse()
+            history_text = "\n".join(history)
+            prompt = (
+                f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
+                f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
+            )
+            response = await openrouter_reply(prompt)
+            await channel.send(response)
+            next_response_time = now + 60 * 60
+        except Exception as e:
+            print(f"[履歴会話エラー] {e}")
 
 # ---------------------
 # 既存の summarize_previous_day は event_active をチェックするように改修
