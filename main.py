@@ -574,6 +574,11 @@ async def summarize_logs(channel):
 
 
 
+
+import datetime
+
+now = datetime.datetime.now()
+
 print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
 
 
@@ -581,7 +586,3 @@ print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_unti
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
-
-
-
