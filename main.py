@@ -80,12 +80,13 @@ MONITOR_CODE = "XHAJRVETKOU"
 # ---------------------
 # 既存機能ラッパー（Web検索・OpenRouter等）を残すが、イベント中は無効にする
 # ---------------------
-    # メンションによる質問処理（通常モード）
-    if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
-        query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-        if not query:
-            await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
-            return
+# メンションによる質問処理（通常モード）
+if content.startswith(f"<@{bot.user.id}>") or content.startswith(f"<@!{bot.user.id}>"):
+    query = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    if not query:
+        await channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+        return
+
 
         thinking_msg = await channel.send(f"{message.author.mention} 考え中だよ\U0001F50D")
 
@@ -563,6 +564,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
