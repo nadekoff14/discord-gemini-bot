@@ -572,10 +572,16 @@ async def summarize_logs(channel):
         print(f"[要約エラー] {e}")
         await channel.send("ごめんね、昨日のまとめを作れなかった・・・")
 
+
+
+print(f"[DEBUG] event_active={event_active}, cooldown_until={count_cooldown_until}, now={now}, channel={channel}")
+
+
 # ---------------------
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
