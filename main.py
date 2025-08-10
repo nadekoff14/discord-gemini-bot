@@ -254,8 +254,9 @@ async def stage_59min_check(channel: discord.abc.GuildChannel, start_ts):
         return
     # まだFINALに到達していない（つまり event_stage < 4 ）なら眠る
     if event_stage < 4:
-        msg = await channel.send("眠くなってきちゃった・・・。少し眠るね。")
-        event_messages.append(msg)
+        msg1 = await channel.send("眠くなってきちゃった・・・。少し眠るね。")
+        msg2 = await channel.send("---謎時イベント終了。システムを終了します。---")
+        event_messages.extend([msg1, msg2])
         # 以降、メンションは削除されるまで受け付けない（実装上 event_active True の間は受け付けないので既に無効）
         # 削除実行は通常通り event_end または final 解答による早期削除で行う
     return
@@ -590,3 +591,4 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
