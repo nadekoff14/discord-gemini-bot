@@ -66,7 +66,7 @@ event_stage = 0                   # 0=待機 1=問いかけ済→待メンショ
 event_messages = []               # イベント中に生成したメッセージオブジェクト（botの投稿）を保存
 participant_messages = []         # イベント中に参加者が送ったメッセージ（botにメンションしているもの）を記録
 count_cooldown_until = 0          # オンラインカウントのクールダウン（1時間停止させる時に使用）
-ONLINE_THRESHOLD = 7              # 起動条件の閾値
+ONLINE_THRESHOLD = 6              # 起動条件の閾値
 NAME_KEYWORDS = [
     "よるのは","yorunoha","えび","えヴぃ","なでこ","いずれ","izure",
     "lufe","macomo","まこも","ちる","れいちる","チル","レイチル",
@@ -591,4 +591,5 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
