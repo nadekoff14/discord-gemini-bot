@@ -543,8 +543,8 @@ async def on_message(message):
 # ---------------------
 # 既存の summarize_previous_day は event_active をチェックするように改修
 # ---------------------
-@tasks.loop(time=time(7, 0, 0))
-async def summarize_previous_day():
+@tasks.loop(time=time(7, 0, tzinfo=timezone(timedelta(hours=9))))
+async def daily_summary():
     await bot.wait_until_ready()
     # イベント中は要約処理を実行しない
     if event_active:
@@ -591,5 +591,6 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
