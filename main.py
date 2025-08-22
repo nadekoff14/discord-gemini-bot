@@ -583,6 +583,22 @@ async def summarize_logs(channel):
         print(f"[要約エラー] {e}")
         await channel.send("ごめんね、昨日のまとめを作れなかった・・・")
 
+@bot.event
+async def on_message(message: discord.Message):
+    # BOT自身のメッセージは無視
+    if message.author.bot:
+        return
+
+    # 「日報」AIにメンションされた場合に強制起動
+    if bot.user in message.mentions and "AI日報" in message.content:
+        channel = message.channel
+        await channel.send("機能の会話ログをまとめるね・・・")
+        await summarize_logs(channel)
+        return  # 他の処理に流さない場合はここでreturn
+
+    # 既存のコマンド処理なども動かすため
+    await bot.process_commands(message)
+
 
 
 
@@ -591,6 +607,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
