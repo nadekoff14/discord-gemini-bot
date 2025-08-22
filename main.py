@@ -5,6 +5,7 @@ import random
 import requests
 import google.generativeai as genai
 import aiohttp
+import feedparse
 from dotenv import load_dotenv
 from openai import OpenAI
 from datetime import datetime, timedelta, time, timezone
@@ -690,6 +691,7 @@ async def on_message(message: discord.Message):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
