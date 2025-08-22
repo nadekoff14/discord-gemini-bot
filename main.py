@@ -612,7 +612,7 @@ RSS_FEEDS = {
     "日本国内": "https://news.google.com/rss/search?q=日本&hl=ja&gl=JP&ceid=JP:ja",
 }
 
-# Geminiでまとめ & 問題提起
+# OpenRouterでまとめ & 問題提起
 async def summarize_all_topics(entries_by_topic) -> str:
     text = ""
     for topic, entries in entries_by_topic.items():
@@ -629,11 +629,11 @@ async def summarize_all_topics(entries_by_topic) -> str:
     )
 
     try:
-        model = genai.GenerativeModel("gemini-pro")
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        # OpenRouterに投げる
+        response = await openrouter_reply(prompt)
+        return response
     except Exception as e:
-        print(f"[Gemini要約エラー] {e}")
+        print(f"[OpenRouter要約エラー] {e}")
         return "ニュースをうまくまとめられなかった・・・"
 
 
@@ -655,7 +655,7 @@ async def post_daily_news():
         entries = await fetch_rss(feed_url)
         entries_by_topic[topic] = entries
 
-    # 全ジャンルをまとめてGeminiに投げる
+    # 全ジャンルをまとめてOpenRouterに投げる
     summary = await summarize_all_topics(entries_by_topic)
     await channel.send(summary)
 
@@ -691,6 +691,7 @@ async def on_message(message: discord.Message):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
