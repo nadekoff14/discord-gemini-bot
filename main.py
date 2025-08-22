@@ -526,7 +526,7 @@ async def on_message(message):
             async for msg in channel.history(limit=20, oldest_first=False):
                 if not msg.author.bot and msg.content.strip():
                     history.append(f"{msg.author.display_name}: {msg.content.strip()}")
-                if len(history) >= 10:
+                if len(history) >= 30:
                     break
             history.reverse()
             history_text = "\n".join(history)
@@ -591,6 +591,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
