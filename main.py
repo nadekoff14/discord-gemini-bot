@@ -619,7 +619,8 @@ async def summarize_all_topics(entries_by_topic) -> str:
         for entry in entries[:3]:  # 各ジャンル2〜3件
             title = entry.get("title", "")
             summary = entry.get("summary", "")
-            text += f"- [{topic}] {title}\n{summary}\n\n"
+            link = entry.get("link", "")
+            text += f"- [{topic}] {title}\n{summary}\n🔗 {link}\n\n"
 
     prompt = (
         "以下は各ジャンルの主要ニュースです。\n"
@@ -691,6 +692,7 @@ async def on_message(message: discord.Message):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
