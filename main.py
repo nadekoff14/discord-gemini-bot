@@ -17,6 +17,7 @@ SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -600,6 +601,99 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
 
+# Geminiでまとめ & 問題提起を生成
+async def summarize_and_comment(articles, topic: str) -> str:
+    text = ""
+    for art in articles:
+        text += f"- {art.get('title')}\n{art.get('description') or ''}\n\n"
+
+    prompt = (
+        f"以下は{topic}に関するニュース記事の候補です。\n"
+        f"2〜3件をまとめて簡潔に要約してください。\n"
+        f"その後、ニュース全体を踏まえて問題提起や意見を1〜2文でまとめてください。\n\n{text}"
+    )
+
+    try:
+        model = genai.GenerativeModel("gemini-pro")
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"[Gemini要約エラー] {e}")
+        return "ニュースをうまくまとめられなかった・・・"
+
+
+# NewsAPIから記事を取得
+async def fetch_news(category: str, query: str = ""):
+    url = f"https://newsapi.org/v2/top-headlines?country=jp&apiKey={NEWS_API_KEY}&pageSize=5"
+    if category:
+        url += f"&category={category}"
+    if query:
+        url += f"&q={query}"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json()
+            return data.get("articles", [])
+
+
+async def post_daily_news():
+    await bot.wait_until_ready()
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        return
+
+    await channel.send("📰 **今日のニュースまとめだよ！**\n")
+
+    topics = {
+        "政治": {"category": "general", "query": "政治"},
+        "経済": {"category": "business", "query": ""},
+        "eスポーツ": {"category": "sports", "query": "eスポーツ"},
+        "ゲーム": {"category": "technology", "query": "ゲーム"},
+        "日本国内": {"category": "general", "query": "日本"},
+    }
+
+    for topic, params in topics.items():
+        articles = await fetch_news(params["category"], params["query"])
+        if not articles:
+            await channel.send(f"【{topic}】ニュースを取得できなかったよ・・・")
+            continue
+
+        selected = articles[:3]  # 2〜3件まとめてGeminiに投げる
+        summary = await summarize_and_comment(selected, topic)
+
+        await channel.send(f"## {topic} のニュース\n{summary}")
+
+
+# 毎日19:00(JST)に実行
+@tasks.loop(minutes=1)
+async def scheduled_news():
+    JST = timezone(timedelta(hours=9))
+    now = datetime.now(JST)
+    if now.hour == 19 and now.minute == 0:
+        await post_daily_news()
+
+
+@bot.event
+async def on_ready():
+    print(f"ログインしました: {bot.user}")
+    scheduled_news.start()
+
+
+# 🔽 デバッグ用: メンション + 「ニュースまとめ」で強制実行
+@bot.event
+async def on_message(message: discord.Message):
+    if message.author.bot:
+        return
+
+    if bot.user in message.mentions and "ニュースまとめ" in message.content:
+        await message.channel.send("📰 強制的にニュースをまとめるね・・・")
+        await post_daily_news()
+
+    # 他のコマンド処理も通す
+    await bot.process_commands(message)
+
 
 
 
@@ -607,7 +701,6 @@ async def on_message(message: discord.Message):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
-
 
 
 
