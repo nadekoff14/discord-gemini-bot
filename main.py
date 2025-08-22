@@ -642,7 +642,7 @@ async def fetch_rss(feed_url: str):
 
 async def post_daily_news():
     await bot.wait_until_ready()
-    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    channel = bot.get_channel(CHANNEL_ID)
     if not channel:
         return
 
@@ -690,6 +690,7 @@ async def on_message(message: discord.Message):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
