@@ -592,7 +592,7 @@ async def on_message(message: discord.Message):
     # 「日報」AIにメンションされた場合に強制起動
     if bot.user in message.mentions and "AI日報" in message.content:
         channel = message.channel
-        await channel.send("機能の会話ログをまとめるね・・・")
+        await channel.send("昨日の会話ログをまとめるね・・・")
         await summarize_logs(channel)
         return  # 他の処理に流さない場合はここでreturn
 
@@ -607,6 +607,7 @@ async def on_message(message: discord.Message):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
