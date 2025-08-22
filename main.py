@@ -536,7 +536,7 @@ async def on_message(message):
             )
             response = await openrouter_reply(prompt)
             await channel.send(response)
-            next_response_time = now + 60 * 60
+            next_response_time = now + 60 * 45
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
@@ -591,6 +591,7 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
