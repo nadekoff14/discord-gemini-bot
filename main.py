@@ -676,22 +676,13 @@ async def on_ready():
     scheduled_news.start()
 
 
-# メンションで強制実行
-@bot.event
-async def on_message(message: discord.Message):
-    if message.author.bot:
-        return
-
-    if bot.user in message.mentions and "ニュースまとめ" in message.content:
-        await message.channel.send("📰 強制的にニュースをまとめるね・・・")
-        await post_daily_news()
-
 
 
 # ---------------------
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
