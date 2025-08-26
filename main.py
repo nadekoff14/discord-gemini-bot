@@ -9,7 +9,7 @@ import feedparser
 from dotenv import load_dotenv
 from openai import OpenAI
 from datetime import datetime, timedelta, time, timezone
-from discord.ext import tasks
+from discord.ext import commands
 
 load_dotenv()
 
@@ -25,7 +25,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.presences = True
-bot = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Gemini 設定
 if GEMINI_API_KEY:
@@ -587,20 +587,24 @@ async def summarize_logs(channel):
         await channel.send("ごめんね、昨日のまとめを作れなかった・・・")
 
 @bot.event
-async def on_message(message: discord.Message):
-    # BOT自身のメッセージは無視
-    if message.author.bot:
-        return
+async def on_ready():
+    print(f"ログインしました: {bot.user}")
+    
+    # 60分ごとのオンラインチェック
+    if not hourly_online_check.is_running():
+        hourly_online_check.start()
+        print("[DEBUG] hourly_online_check started.")
+    
+    # 日報まとめループ
+    if not summarize_previous_day.is_running():
+        summarize_previous_day.start()
+        print("[DEBUG] summarize_previous_day started.")
+    
+    # 毎日19:00のニュース投稿ループ
+    if not scheduled_news.is_running():
+        scheduled_news.start()
+        print("[DEBUG] scheduled_news started.")
 
-    # 「日報」AIにメンションされた場合に強制起動
-    if bot.user in message.mentions and "AI日報" in message.content:
-        channel = message.channel
-        await channel.send("昨日の会話ログをまとめるね・・・")
-        await summarize_logs(channel)
-        return  # 他の処理に流さない場合はここでreturn
-
-    # 既存のコマンド処理なども動かすため
-    await bot.process_commands(message)
 
 
 # 取得するGoogleニュースRSSフィード（ジャンル別）
@@ -670,18 +674,13 @@ async def scheduled_news():
         await post_daily_news()
 
 
-@bot.event
-async def on_ready():
-    print(f"ログインしました: {bot.user}")
-    scheduled_news.start()
-
-
 
 
 # ---------------------
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
