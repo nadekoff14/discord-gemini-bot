@@ -9,7 +9,7 @@ import feedparser
 from dotenv import load_dotenv
 from openai import OpenAI
 from datetime import datetime, timedelta, time, timezone
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 load_dotenv()
 
@@ -680,6 +680,7 @@ async def scheduled_news():
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
