@@ -186,8 +186,10 @@ async def daily_summary():
 async def summarize_logs(channel):
     JST = timezone(timedelta(hours=9))
     now = datetime.now(JST)
+
+    # 集計範囲：昨日7:00 ～ 今日7:00
     start_time = datetime(now.year, now.month, now.day, 7, 0, 0, tzinfo=JST) - timedelta(days=1)
-    end_time = datetime(now.year, now.month, now.day, 6, 59, 59, tzinfo=JST)
+    end_time   = datetime(now.year, now.month, now.day, 7, 0, 0, tzinfo=JST)
 
     messages = []
     async for msg in channel.history(limit=1000, after=start_time, before=end_time, oldest_first=True):
@@ -212,6 +214,7 @@ async def summarize_logs(channel):
     except Exception as e:
         print(f"[要約エラー] {e}")
         await channel.send("ごめんね、昨日のまとめを作れなかった・・・")
+
 
 # ---------------------
 # on_ready
@@ -302,6 +305,7 @@ async def scheduled_news():
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
 
 
 
